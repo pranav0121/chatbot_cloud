@@ -4,6 +4,7 @@ from datetime import datetime
 import pyodbc
 import logging
 from config import Config
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -56,6 +57,14 @@ class CommonQuery(db.Model):
     CreatedAt = db.Column(db.DateTime, default=datetime.utcnow)
     UpdatedAt = db.Column(db.DateTime, default=datetime.utcnow)
 
+class Feedback(db.Model):
+    __tablename__ = 'Feedback'
+    FeedbackID = db.Column(db.Integer, primary_key=True)
+    TicketID = db.Column(db.Integer, db.ForeignKey('Tickets.TicketID'))
+    Rating = db.Column(db.Integer, nullable=False)
+    Comment = db.Column(db.Text)
+    CreatedAt = db.Column(db.DateTime, default=datetime.utcnow)
+
 # Routes
 @app.route('/')
 def index():
@@ -64,9 +73,14 @@ def index():
 @app.route('/api/categories', methods=['GET'])
 def get_categories():
     try:
+        print("Getting categories...")
+        
         # First, ensure the database has categories
         count = Category.query.count()
+        print(f"Current category count: {count}")
+        
         if count == 0:
+            print("No categories found, creating default categories...")
             # Insert default categories if none exist
             default_categories = [
                 Category(Name='Payments', Team='Billing'),
@@ -74,19 +88,131 @@ def get_categories():
                 Category(Name='Technical Glitches', Team='Tech'),
                 Category(Name='General Inquiries', Team='General')
             ]
-            db.session.bulk_save_objects(default_categories)
-            db.session.commit()
-            print("Inserted default categories")
+            
+            for cat in default_categories:
+                db.session.add(cat)
+            
+            try:
+                db.session.commit()
+                print("Default categories created successfully")
+                
+                # Add some common queries
+                setup_common_queries()
+                print("Common queries setup completed")
+            except Exception as e:
+                print(f"Error creating categories: {e}")
+                db.session.rollback()
+                return jsonify({"error": "Failed to create categories"}), 500
         
         categories = Category.query.all()
         print(f"Found {len(categories)} categories")
+        
         result = [{'id': c.CategoryID, 'name': c.Name} for c in categories]
-        print("Categories:", result)
+        print("Categories result:", result)
+        
         return jsonify(result)
+        
     except Exception as e:
-        print("Error fetching categories:", str(e))
+        print("Error in get_categories:", str(e))
         db.session.rollback()
-        return jsonify({"error": str(e)}), 500
+        
+        # Return default categories as fallback
+        default_result = [
+            {'id': 1, 'name': 'Payments'},
+            {'id': 2, 'name': 'Product Issues'},
+            {'id': 3, 'name': 'Technical Glitches'},
+            {'id': 4, 'name': 'General Inquiries'}
+        ]
+        print("Returning fallback categories")
+        return jsonify(default_result)
+
+def setup_common_queries():
+    """Setup default common queries for each category"""
+    try:
+        categories = Category.query.all()
+        
+        common_queries_data = {
+            'Payments': [
+                {
+                    'question': 'How do I update my payment method?',
+                    'solution': 'You can update your payment method by going to Account Settings > Billing > Payment Methods. Click "Add New Method" or "Edit" next to your existing method.'
+                },
+                {
+                    'question': 'Why was my payment declined?',
+                    'solution': 'Payment declines can happen due to insufficient funds, expired cards, or bank security measures. Please check with your bank or try a different payment method.'
+                },
+                {
+                    'question': 'How do I get a refund?',
+                    'solution': 'Refunds can be requested within 30 days of purchase. Please contact our billing team with your order number and reason for refund.'
+                }
+            ],
+            'Product Issues': [
+                {
+                    'question': 'The product is not working as expected',
+                    'solution': 'Please try refreshing the page or clearing your browser cache. If the issue persists, try using a different browser or device.'
+                },
+                {
+                    'question': 'I can\'t find a specific feature',
+                    'solution': 'Our features are organized in the main navigation menu. You can also use the search function or check our help documentation for detailed guides.'
+                },
+                {
+                    'question': 'How do I report a bug?',
+                    'solution': 'You can report bugs by clicking the "Report Issue" button in the app or by sending us a detailed description of the problem including steps to reproduce it.'
+                }
+            ],
+            'Technical Glitches': [
+                {
+                    'question': 'The page won\'t load properly',
+                    'solution': 'Try refreshing the page (Ctrl+F5), clearing your browser cache, or disabling browser extensions. If the problem continues, try a different browser.'
+                },
+                {
+                    'question': 'I\'m getting error messages',
+                    'solution': 'Please note down the exact error message and try refreshing the page. If it persists, clear your browser cache and cookies, then try again.'
+                },
+                {
+                    'question': 'The app is running slowly',
+                    'solution': 'Slow performance can be due to network issues, browser cache, or high server load. Try closing other browser tabs and refreshing the page.'
+                }
+            ],
+            'General Inquiries': [
+                {
+                    'question': 'How do I contact customer support?',
+                    'solution': 'You can reach our support team through this chat, email us at support@company.com, or call our hotline during business hours.'
+                },
+                {
+                    'question': 'What are your business hours?',
+                    'solution': 'Our support team is available Monday to Friday, 9 AM to 6 PM EST. Emergency support is available 24/7 for critical issues.'
+                },
+                {
+                    'question': 'How do I create an account?',
+                    'solution': 'Click the "Sign Up" button on our homepage, fill in your details, verify your email address, and you\'re ready to get started!'
+                }
+            ]
+        }
+        
+        for category in categories:
+            if category.Name in common_queries_data:
+                for query_data in common_queries_data[category.Name]:
+                    # Check if query already exists
+                    existing = CommonQuery.query.filter_by(
+                        CategoryID=category.CategoryID, 
+                        Question=query_data['question']
+                    ).first()
+                    
+                    if not existing:
+                        query = CommonQuery(
+                            CategoryID=category.CategoryID,
+                            Question=query_data['question'],
+                            Solution=query_data['solution']
+                        )
+                        db.session.add(query)
+        
+        db.session.commit()
+        print("Common queries setup completed")
+        
+    except Exception as e:
+        print(f"Error setting up common queries: {str(e)}")
+        db.session.rollback()
 
 @app.route('/api/common-queries/<int:category_id>', methods=['GET'])
 def get_common_queries(category_id):
@@ -99,37 +225,98 @@ def get_common_queries(category_id):
 
 @app.route('/api/tickets', methods=['POST'])
 def create_ticket():
-    data = request.json
-    
-    # Create or get user
-    user = None
-    if data.get('name') or data.get('email'):
-        user = User(Name=data.get('name'), Email=data.get('email'))
-        db.session.add(user)
-        db.session.commit()
-    
-    # Create ticket
-    ticket = Ticket(
-        UserID=user.UserID if user else None,
-        CategoryID=data['category_id'],
-        Subject=data['subject']
-    )
-    db.session.add(ticket)
-    
-    # Create initial message
-    message = Message(
-        TicketID=ticket.TicketID,
-        SenderID=user.UserID if user else None,
-        Content=data['message']
-    )
-    db.session.add(message)
-    db.session.commit()
-    
-    return jsonify({
-        'ticket_id': ticket.TicketID,
-        'status': 'success',
-        'message': 'Ticket created successfully'
-    })
+    try:
+        logger.info("Creating new ticket...")
+        data = request.json
+        logger.info(f"Received data: {data}")
+        
+        if not data:
+            logger.error("No data received")
+            return jsonify({
+                'status': 'error',
+                'message': 'No data provided'
+            }), 400
+        
+        # Validate required fields
+        if not data.get('message'):
+            logger.error("Message is required")
+            return jsonify({
+                'status': 'error',
+                'message': 'Message is required'
+            }), 400
+        
+        # Create or get user
+        user = None
+        if data.get('name') or data.get('email'):
+            try:
+                user = User(Name=data.get('name'), Email=data.get('email'))
+                db.session.add(user)
+                db.session.flush()  # Get the ID without committing
+                logger.info(f"Created user with ID: {user.UserID}")
+            except Exception as e:
+                logger.error(f"Error creating user: {str(e)}")
+                db.session.rollback()
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Error creating user'
+                }), 500
+        
+        # Get category ID - default to 1 if not provided
+        category_id = data.get('category_id', 1)
+        logger.info(f"Using category_id: {category_id}")
+        
+        # Create ticket
+        try:
+            ticket = Ticket(
+                UserID=user.UserID if user else None,
+                CategoryID=category_id,
+                Subject=data.get('subject', 'Support Request'),
+                Status='open'
+            )
+            db.session.add(ticket)
+            db.session.flush()  # Get the ID without committing
+            logger.info(f"Created ticket with ID: {ticket.TicketID}")
+        except Exception as e:
+            logger.error(f"Error creating ticket: {str(e)}")
+            db.session.rollback()
+            return jsonify({
+                'status': 'error',
+                'message': 'Error creating ticket'
+            }), 500
+        
+        # Create initial message
+        try:
+            message = Message(
+                TicketID=ticket.TicketID,
+                SenderID=user.UserID if user else None,
+                Content=data['message'],
+                IsAdminReply=False
+            )
+            db.session.add(message)
+            db.session.commit()
+            logger.info(f"Created message with ID: {message.MessageID}")
+        except Exception as e:
+            logger.error(f"Error creating message: {str(e)}")
+            db.session.rollback()
+            return jsonify({
+                'status': 'error',
+                'message': 'Error creating message'
+            }), 500
+        
+        logger.info(f"Successfully created ticket {ticket.TicketID}")
+        return jsonify({
+            'ticket_id': ticket.TicketID,
+            'status': 'success',
+            'message': 'Ticket created successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Unexpected error in create_ticket: {str(e)}")
+        db.session.rollback()
+        return jsonify({
+            'status': 'error',
+            'message': 'Internal server error'
+        }), 500
 
 @app.route('/api/tickets/<int:ticket_id>/messages', methods=['GET', 'POST'])
 def handle_messages(ticket_id):
@@ -151,12 +338,550 @@ def handle_messages(ticket_id):
         IsAdminReply=data.get('is_admin', False)
     )
     db.session.add(message)
+    
+    # Update ticket timestamp
+    ticket = Ticket.query.get(ticket_id)
+    if ticket:
+        ticket.UpdatedAt = datetime.utcnow()
+        if data.get('is_admin', False) and ticket.Status == 'open':
+            ticket.Status = 'in_progress'
+    
     db.session.commit()
     
     return jsonify({
         'status': 'success',
         'message_id': message.MessageID
     })
+
+@app.route('/admin')
+def admin_dashboard():
+    return render_template('admin.html')
+
+@app.route('/api/admin/dashboard-stats', methods=['GET'])
+def get_dashboard_stats():
+    try:
+        logger.info("Loading dashboard stats...")
+        
+        # Test database connection first
+        try:
+            db.session.execute('SELECT 1')
+            logger.info("Database connection successful")
+        except Exception as db_error:
+            logger.error(f"Database connection failed: {str(db_error)}")
+            return jsonify({
+                "error": "Database connection failed",
+                "details": str(db_error)
+            }), 500
+        
+        # Get stats with detailed logging
+        total_tickets = Ticket.query.count()
+        logger.info(f"Total tickets: {total_tickets}")
+        
+        pending_tickets = Ticket.query.filter(Ticket.Status.in_(['open', 'in_progress'])).count()
+        logger.info(f"Pending tickets: {pending_tickets}")
+        
+        resolved_tickets = Ticket.query.filter_by(Status='resolved').count()
+        logger.info(f"Resolved tickets: {resolved_tickets}")
+        
+        active_chats = Ticket.query.filter(Ticket.Status.in_(['open', 'in_progress'])).count()
+        logger.info(f"Active chats: {active_chats}")
+        
+        # Also get some sample tickets for debugging
+        sample_tickets = Ticket.query.limit(5).all()
+        logger.info(f"Sample tickets found: {len(sample_tickets)}")
+        for ticket in sample_tickets:
+            logger.info(f"Ticket {ticket.TicketID}: {ticket.Subject} - Status: {ticket.Status}")
+        
+        result = {
+            'totalTickets': total_tickets,
+            'pendingTickets': pending_tickets,
+            'resolvedTickets': resolved_tickets,
+            'activeChats': active_chats
+        }
+        
+        logger.info(f"Dashboard stats result: {result}")
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error in get_dashboard_stats: {str(e)}", exc_info=True)
+        return jsonify({
+            "error": str(e),
+            "message": "Failed to load dashboard statistics"
+        }), 500
+
+@app.route('/api/admin/recent-activity', methods=['GET'])
+def get_recent_activity():
+    try:
+        # Get recent tickets and messages
+        recent_tickets = db.session.query(Ticket, User, Category).join(
+            User, Ticket.UserID == User.UserID, isouter=True
+        ).join(
+            Category, Ticket.CategoryID == Category.CategoryID
+        ).order_by(Ticket.CreatedAt.desc()).limit(10).all()
+        
+        activities = []
+        for ticket, user, category in recent_tickets:
+            activities.append({
+                'icon': 'fas fa-ticket-alt',
+                'title': f'New ticket #{ticket.TicketID}',
+                'description': f'{category.Name} - {user.Name if user else "Anonymous"}',
+                'created_at': ticket.CreatedAt.isoformat()
+            })
+        
+        return jsonify(activities)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/admin/tickets', methods=['GET'])
+def get_admin_tickets():
+    try:
+        logger.info("Loading admin tickets...")
+        
+        # Test database connection
+        try:
+            db.session.execute('SELECT 1')
+            logger.info("Database connection successful for tickets")
+        except Exception as db_error:
+            logger.error(f"Database connection failed in tickets: {str(db_error)}")
+            return jsonify({
+                "error": "Database connection failed",
+                "details": str(db_error)
+            }), 500
+        
+        # Try to get tickets with detailed logging
+        try:
+            tickets = db.session.query(Ticket, User, Category).join(
+                User, Ticket.UserID == User.UserID, isouter=True
+            ).join(
+                Category, Ticket.CategoryID == Category.CategoryID
+            ).order_by(Ticket.CreatedAt.desc()).all()
+            
+            logger.info(f"Found {len(tickets)} tickets in database")
+            
+            result = []
+            for ticket, user, category in tickets:
+                ticket_data = {
+                    'id': ticket.TicketID,
+                    'subject': ticket.Subject,
+                    'category': category.Name if category else 'Unknown',
+                    'user_name': user.Name if user else 'Anonymous',
+                    'user_email': user.Email if user else 'No email',
+                    'status': ticket.Status,
+                    'created_at': ticket.CreatedAt.isoformat()
+                }
+                result.append(ticket_data)
+                logger.info(f"Processed ticket {ticket.TicketID}: {ticket.Subject}")
+            
+            logger.info(f"Returning {len(result)} tickets to admin panel")
+            return jsonify(result)
+            
+        except Exception as query_error:
+            logger.error(f"Error querying tickets: {str(query_error)}", exc_info=True)
+            
+            # Try a simpler query as fallback
+            try:
+                simple_tickets = Ticket.query.all()
+                logger.info(f"Fallback: Found {len(simple_tickets)} tickets with simple query")
+                
+                result = []
+                for ticket in simple_tickets:
+                    result.append({
+                        'id': ticket.TicketID,
+                        'subject': ticket.Subject,
+                        'category': 'Unknown',
+                        'user_name': 'Unknown',
+                        'user_email': 'Unknown',
+                        'status': ticket.Status,
+                        'created_at': ticket.CreatedAt.isoformat()
+                    })
+                
+                return jsonify(result)
+                
+            except Exception as simple_error:
+                logger.error(f"Even simple query failed: {str(simple_error)}")
+                return jsonify({
+                    "error": "Failed to query tickets",
+                    "details": str(simple_error)
+                }), 500
+        
+    except Exception as e:
+        logger.error(f"Unexpected error in get_admin_tickets: {str(e)}", exc_info=True)
+        return jsonify({
+            "error": str(e),
+            "message": "Failed to load tickets"
+        }), 500
+
+@app.route('/api/admin/tickets/<int:ticket_id>', methods=['GET'])
+def get_admin_ticket_details(ticket_id):
+    try:
+        ticket = db.session.query(Ticket, User, Category).join(
+            User, Ticket.UserID == User.UserID, isouter=True
+        ).join(
+            Category, Ticket.CategoryID == Category.CategoryID
+        ).filter(Ticket.TicketID == ticket_id).first()
+        
+        if not ticket:
+            return jsonify({"error": "Ticket not found"}), 404
+        
+        ticket_obj, user, category = ticket
+        
+        # Get messages
+        messages = Message.query.filter_by(TicketID=ticket_id).order_by(Message.CreatedAt).all()
+        
+        result = {
+            'id': ticket_obj.TicketID,
+            'subject': ticket_obj.Subject,
+            'category': category.Name,
+            'user_name': user.Name if user else None,
+            'user_email': user.Email if user else None,
+            'status': ticket_obj.Status,
+            'created_at': ticket_obj.CreatedAt.isoformat(),
+            'messages': [{
+                'content': msg.Content,
+                'is_admin': msg.IsAdminReply,
+                'created_at': msg.CreatedAt.isoformat()
+            } for msg in messages]
+        }
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/admin/active-conversations', methods=['GET'])
+def get_active_conversations():
+    try:
+        # Get tickets with recent activity
+        conversations = db.session.query(Ticket, User, Category).join(
+            User, Ticket.UserID == User.UserID, isouter=True
+        ).join(
+            Category, Ticket.CategoryID == Category.CategoryID
+        ).filter(Ticket.Status.in_(['open', 'in_progress'])).order_by(Ticket.UpdatedAt.desc()).all()
+        
+        result = []
+        for ticket, user, category in conversations:
+            # Get last message time
+            last_message = Message.query.filter_by(TicketID=ticket.TicketID).order_by(Message.CreatedAt.desc()).first()
+            
+            # Count unread admin messages (assuming we track this)
+            unread_count = Message.query.filter_by(TicketID=ticket.TicketID, IsAdminReply=False).count()
+            
+            result.append({
+                'id': ticket.TicketID,
+                'subject': ticket.Subject,
+                'user_name': user.Name if user else None,
+                'category': category.Name,
+                'status': ticket.Status,
+                'last_message_at': last_message.CreatedAt.isoformat() if last_message else ticket.CreatedAt.isoformat(),
+                'unread_count': min(unread_count, 5)  # Cap at 5 for display
+            })
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/admin/tickets/<int:ticket_id>/status', methods=['PUT'])
+def update_ticket_status(ticket_id):
+    try:
+        data = request.json
+        new_status = data.get('status')
+        admin_message = data.get('message', '')  # Optional message from admin
+        
+        if new_status not in ['open', 'in_progress', 'resolved', 'closed']:
+            return jsonify({"error": "Invalid status"}), 400
+        
+        ticket = Ticket.query.get(ticket_id)
+        if not ticket:
+            return jsonify({"error": "Ticket not found"}), 404
+        
+        # Update ticket status
+        old_status = ticket.Status
+        ticket.Status = new_status
+        ticket.UpdatedAt = datetime.utcnow()
+        
+        # If ticket is being resolved or closed, send notification to user
+        if new_status in ['resolved', 'closed'] and old_status not in ['resolved', 'closed']:
+            # Create a system message to notify the user
+            notification_content = admin_message if admin_message else (
+                "Your issue has been resolved. Thank you for contacting support! "
+                "If you need further assistance, please feel free to create a new ticket."
+            )
+            
+            # Add the notification as an admin message
+            notification_message = Message(
+                TicketID=ticket_id,
+                SenderID=None,  # System message
+                Content=notification_content,
+                IsAdminReply=True,
+                CreatedAt=datetime.utcnow()
+            )
+            db.session.add(notification_message)
+            
+            # Also add a system closure message
+            if new_status == 'closed':
+                closure_message = Message(
+                    TicketID=ticket_id,
+                    SenderID=None,  # System message
+                    Content="This chat session has been closed. Rating and feedback are appreciated.",
+                    IsAdminReply=True,
+                    CreatedAt=datetime.utcnow()
+                )
+                db.session.add(closure_message)
+        
+        db.session.commit()
+        
+        response_data = {
+            "status": "success", 
+            "message": "Ticket status updated",
+            "new_status": new_status,
+            "notification_sent": new_status in ['resolved', 'closed'] and old_status not in ['resolved', 'closed']
+        }
+        
+        return jsonify(response_data)
+    except Exception as e:
+        logger.error(f"Error updating ticket status: {str(e)}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/admin/analytics', methods=['GET'])
+def get_analytics():
+    try:
+        # Category distribution
+        category_stats = db.session.query(Category.Name, db.func.count(Ticket.TicketID)).join(
+            Ticket, Category.CategoryID == Ticket.CategoryID
+        ).group_by(Category.Name).all()
+        
+        category_data = {
+            'labels': [stat[0] for stat in category_stats],
+            'values': [stat[1] for stat in category_stats]
+        }
+        
+        # Resolution time (mock data for now)
+        resolution_data = {
+            'labels': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+            'values': [2.5, 3.2, 2.8, 4.1, 3.5, 2.1, 1.8]
+        }
+        
+        return jsonify({
+            'categoryData': category_data,
+            'resolutionData': resolution_data
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/feedback', methods=['POST'])
+def submit_feedback():
+    """Submit user feedback for a ticket"""
+    try:
+        data = request.json
+        ticket_id = data.get('ticket_id')
+        rating = data.get('rating', 0)
+        feedback_text = data.get('feedback', '')
+        
+        if not ticket_id:
+            return jsonify({"error": "Ticket ID is required"}), 400
+        
+        # Verify ticket exists
+        ticket = Ticket.query.get(ticket_id)
+        if not ticket:
+            return jsonify({"error": "Ticket not found"}), 404
+        
+        # Create feedback message
+        feedback_message = Message(
+            TicketID=ticket_id,
+            SenderID=None,  # System message
+            Content=f"User Feedback - Rating: {rating}/5 stars" + 
+                   (f"\nFeedback: {feedback_text}" if feedback_text else ""),
+            IsAdminReply=False,
+            CreatedAt=datetime.utcnow()
+        )
+        
+        db.session.add(feedback_message)
+        db.session.commit()
+        
+        logger.info(f"Feedback submitted for ticket {ticket_id}: Rating={rating}")
+        
+        return jsonify({
+            "status": "success",
+            "message": "Thank you for your feedback!"
+        })
+        
+    except Exception as e:
+        logger.error(f"Error submitting feedback: {str(e)}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """Simple health check endpoint"""
+    return jsonify({
+        "status": "healthy",
+        "message": "Customer Support System is running",
+        "timestamp": datetime.utcnow().isoformat()
+    })
+
+@app.route('/api/diagnose', methods=['GET'])
+def diagnose_database():
+    """Endpoint to diagnose database connection issues"""
+    diagnosis = {
+        'status': 'checking',
+        'config': {},
+        'drivers': [],
+        'connections': [],
+        'recommendations': []
+    }
+    
+    try:
+        # Get configuration info
+        config = Config()
+        diagnosis['config'] = {
+            'DB_SERVER': config.DB_SERVER,
+            'DB_DATABASE': config.DB_DATABASE,
+            'DB_USERNAME': config.DB_USERNAME,
+            'DB_USE_WINDOWS_AUTH': getattr(config, 'DB_USE_WINDOWS_AUTH', 'Not set'),
+            'SQLALCHEMY_DATABASE_URI': config.SQLALCHEMY_DATABASE_URI
+        }
+        
+        # List available ODBC drivers
+        try:
+            drivers = pyodbc.drivers()
+            sql_drivers = [d for d in drivers if 'SQL Server' in d or 'sql' in d.lower()]
+            diagnosis['drivers'] = sql_drivers
+        except Exception as e:
+            diagnosis['drivers'] = f"Error listing drivers: {str(e)}"
+        
+        # Test different connection strings
+        test_connections = [
+            {
+                'name': 'Current SQLAlchemy Config',
+                'conn_str': config.SQLALCHEMY_DATABASE_URI
+            }
+        ]
+        
+        # Add Windows Authentication options
+        for driver in ['ODBC Driver 17 for SQL Server', 'SQL Server Native Client 11.0', 'SQL Server']:
+            test_connections.append({
+                'name': f'Windows Auth - {driver}',
+                'conn_str': f'DRIVER={{{driver}}};SERVER={config.DB_SERVER};DATABASE={config.DB_DATABASE};Trusted_Connection=yes;'
+            })
+        
+        # Test each connection
+        for test in test_connections:
+            connection_result = {
+                'name': test['name'],
+                'conn_str': test['conn_str'],
+                'status': 'failed',
+                'error': None,
+                'database_exists': False,
+                'tables': []
+            }
+            
+            try:
+                if test['name'] == 'Current SQLAlchemy Config':
+                    # Test SQLAlchemy connection
+                    from sqlalchemy import create_engine
+                    engine = create_engine(test['conn_str'])
+                    with engine.connect() as conn:
+                        result = conn.execute("SELECT @@VERSION")
+                        version = result.fetchone()[0]
+                        connection_result['status'] = 'success'
+                        connection_result['version'] = version[:100]
+                else:
+                    # Test pyodbc connection
+                    conn = pyodbc.connect(test['conn_str'], timeout=10)
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT @@VERSION")
+                    version = cursor.fetchone()[0]
+                    connection_result['status'] = 'success'
+                    connection_result['version'] = version[:100]
+                    
+                    # Check if database exists
+                    try:
+                        cursor.execute("SELECT DB_ID('SupportChatbot')")
+                        db_id = cursor.fetchone()[0]
+                        if db_id:
+                            connection_result['database_exists'] = True
+                            
+                            # Check tables
+                            cursor.execute("USE SupportChatbot; SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'")
+                            tables = cursor.fetchall()
+                            connection_result['tables'] = [t[0] for t in tables]
+                    except Exception as db_e:
+                        connection_result['database_check_error'] = str(db_e)
+                    
+                    cursor.close()
+                    conn.close()
+                    
+            except Exception as e:
+                connection_result['error'] = str(e)
+            
+            diagnosis['connections'].append(connection_result)
+        
+        # Generate recommendations
+        working_connections = [c for c in diagnosis['connections'] if c['status'] == 'success']
+        
+        if not working_connections:
+            diagnosis['recommendations'].append("No database connections successful. Check if SQL Server is running.")
+            diagnosis['recommendations'].append("Try: Get-Service -Name 'MSSQL$SQLEXPRESS'")
+            diagnosis['recommendations'].append("Verify server name: " + config.DB_SERVER)
+        else:
+            working_conn = working_connections[0]
+            if not working_conn.get('database_exists', False):
+                diagnosis['recommendations'].append("Database connection successful but SupportChatbot database doesn't exist.")
+                diagnosis['recommendations'].append("Run the database setup script to create the database.")
+            elif len(working_conn.get('tables', [])) == 0:
+                diagnosis['recommendations'].append("Database exists but no tables found.")
+                diagnosis['recommendations'].append("Run the table creation script.")
+            else:
+                diagnosis['recommendations'].append("Database connection and tables look good!")
+                diagnosis['recommendations'].append("The issue might be in the SQLAlchemy configuration.")
+        
+        diagnosis['status'] = 'completed'
+        
+    except Exception as e:
+        diagnosis['status'] = 'error'
+        diagnosis['error'] = str(e)
+    
+    return jsonify(diagnosis)
+
+@app.route('/api/tickets/<int:ticket_id>', methods=['GET'])
+def get_ticket_details(ticket_id):
+    """Get ticket details including status and messages for user interface"""
+    try:
+        # Get ticket with user and category info
+        ticket_query = db.session.query(Ticket, User, Category).join(
+            User, Ticket.UserID == User.UserID, isouter=True
+        ).join(
+            Category, Ticket.CategoryID == Category.CategoryID
+        ).filter(Ticket.TicketID == ticket_id).first()
+        
+        if not ticket_query:
+            return jsonify({"error": "Ticket not found"}), 404
+        
+        ticket, user, category = ticket_query
+        
+        # Get messages for this ticket
+        messages = Message.query.filter_by(TicketID=ticket_id).order_by(Message.CreatedAt).all()
+        
+        result = {
+            'id': ticket.TicketID,
+            'subject': ticket.Subject,
+            'status': ticket.Status,
+            'category': category.Name if category else 'Unknown',
+            'user_name': user.Name if user else 'Anonymous',
+            'user_email': user.Email if user else 'No email',
+            'created_at': ticket.CreatedAt.isoformat(),
+            'updated_at': ticket.UpdatedAt.isoformat(),
+            'messages': [{
+                'content': msg.Content,
+                'is_admin': msg.IsAdminReply,
+                'created_at': msg.CreatedAt.isoformat()
+            } for msg in messages]
+        }
+        
+        logger.info(f"Returning ticket details for {ticket_id}: Status={ticket.Status}")
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error getting ticket details: {str(e)}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     try:

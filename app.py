@@ -1,10 +1,15 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, render_template, request, jsonify, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 import pyodbc
 import logging
 from config import Config
 import os
+from werkzeug.utils import secure_filename
+from werkzeug.datastructures import FileStorage
+from PIL import Image
+import uuid
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -13,6 +18,39 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.config.from_object(Config)
 db = SQLAlchemy(app)
+
+# Add proper session management to prevent connection pool exhaustion
+@app.teardown_appcontext
+def close_db(error):
+    """Close database connections after each request"""
+    try:
+        db.session.remove()
+    except Exception as e:
+        logger.error(f"Error closing database session: {str(e)}")
+
+@app.teardown_request
+def close_db_session(exception):
+    """Ensure database session is properly closed"""
+    try:
+        if exception:
+            db.session.rollback()
+        db.session.close()
+    except Exception as e:
+        logger.error(f"Error in teardown_request: {str(e)}")
+
+# File upload configuration
+UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads')
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'}
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
+
+# Ensure upload directory exists
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # Database Models
 class User(db.Model):
@@ -34,7 +72,7 @@ class Ticket(db.Model):
     TicketID = db.Column(db.Integer, primary_key=True)
     UserID = db.Column(db.Integer, db.ForeignKey('Users.UserID'))
     CategoryID = db.Column(db.Integer, db.ForeignKey('Categories.CategoryID'))
-    Subject = db.Column(db.String(255), nullable=False)
+    Subject = db.Column(db.String(255, 'utf8mb4_bin'), nullable=False)
     Status = db.Column(db.String(20), default='open')
     CreatedAt = db.Column(db.DateTime, default=datetime.utcnow)
     UpdatedAt = db.Column(db.DateTime, default=datetime.utcnow)
@@ -65,10 +103,74 @@ class Feedback(db.Model):
     Comment = db.Column(db.Text)
     CreatedAt = db.Column(db.DateTime, default=datetime.utcnow)
 
+class Attachment(db.Model):
+    __tablename__ = 'Attachments'
+    AttachmentID = db.Column(db.Integer, primary_key=True)
+    MessageID = db.Column(db.Integer, db.ForeignKey('Messages.MessageID'))
+    OriginalName = db.Column(db.String(255), nullable=False)
+    StoredName = db.Column(db.String(255), nullable=False)
+    FileSize = db.Column(db.Integer, nullable=False)
+    MimeType = db.Column(db.String(100), nullable=False)
+    CreatedAt = db.Column(db.DateTime, default=datetime.utcnow)
+
 # Routes
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/faq')
+def faq():
+    return render_template('faq.html')
+
+def optimize_image(image_path, max_size=(800, 800), quality=85):
+    """Optimize uploaded image to reduce file size"""
+    try:
+        with Image.open(image_path) as img:
+            # Convert to RGB if necessary
+            if img.mode in ('RGBA', 'P'):
+                img = img.convert('RGB')
+            
+            # Resize if larger than max_size
+            img.thumbnail(max_size, Image.Resampling.LANCZOS)
+            
+            # Save optimized version
+            img.save(image_path, 'JPEG', quality=quality, optimize=True)
+            return True
+    except Exception as e:
+        logger.error(f"Error optimizing image: {e}")
+        return False
+
+def save_file(file):
+    """Save uploaded file and return file info"""
+    if not file or not allowed_file(file.filename):
+        return None
+    
+    try:
+        # Generate unique filename
+        filename = secure_filename(file.filename)
+        file_ext = filename.rsplit('.', 1)[1].lower()
+        unique_filename = f"{uuid.uuid4()}.{file_ext}"
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+        
+        # Save file
+        file.save(file_path)
+        
+        # Optimize if it's an image
+        if file_ext in {'jpg', 'jpeg', 'png'}:
+            optimize_image(file_path)
+        
+        # Get file size
+        file_size = os.path.getsize(file_path)
+        
+        return {
+            'original_name': filename,
+            'stored_name': unique_filename,
+            'file_size': file_size,
+            'mime_type': file.mimetype or f'image/{file_ext}'
+        }
+    except Exception as e:
+        logger.error(f"Error saving file: {e}")
+        return None
 
 @app.route('/api/categories', methods=['GET'])
 def get_categories():
@@ -283,8 +385,7 @@ def create_ticket():
                 'status': 'error',
                 'message': 'Error creating ticket'
             }), 500
-        
-        # Create initial message
+          # Create initial message
         try:
             message = Message(
                 TicketID=ticket.TicketID,
@@ -306,6 +407,7 @@ def create_ticket():
         logger.info(f"Successfully created ticket {ticket.TicketID}")
         return jsonify({
             'ticket_id': ticket.TicketID,
+            'user_id': user.UserID if user else None,
             'status': 'success',
             'message': 'Ticket created successfully'
         })
@@ -322,12 +424,28 @@ def create_ticket():
 def handle_messages(ticket_id):
     if request.method == 'GET':
         messages = Message.query.filter_by(TicketID=ticket_id).order_by(Message.CreatedAt).all()
-        return jsonify([{
-            'id': m.MessageID,
-            'content': m.Content,
-            'is_admin': m.IsAdminReply,
-            'created_at': m.CreatedAt.isoformat()
-        } for m in messages])
+        message_list = []
+        
+        for m in messages:
+            # Get attachments for this message
+            attachments = Attachment.query.filter_by(MessageID=m.MessageID).all()
+            
+            message_data = {
+                'id': m.MessageID,
+                'content': m.Content,
+                'is_admin': m.IsAdminReply,
+                'created_at': m.CreatedAt.isoformat(),
+                'attachments': [{
+                    'id': att.AttachmentID,
+                    'original_name': att.OriginalName,
+                    'url': f'/static/uploads/{att.StoredName}',
+                    'file_size': att.FileSize,
+                    'mime_type': att.MimeType
+                } for att in attachments]
+            }
+            message_list.append(message_data)
+        
+        return jsonify(message_list)
     
     # POST new message
     data = request.json
@@ -338,8 +456,7 @@ def handle_messages(ticket_id):
         IsAdminReply=data.get('is_admin', False)
     )
     db.session.add(message)
-    
-    # Update ticket timestamp
+      # Update ticket timestamp
     ticket = Ticket.query.get(ticket_id)
     if ticket:
         ticket.UpdatedAt = datetime.utcnow()
@@ -352,6 +469,167 @@ def handle_messages(ticket_id):
         'status': 'success',
         'message_id': message.MessageID
     })
+
+@app.route('/api/upload', methods=['POST'])
+def upload_file():
+    """Handle file upload"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        if not allowed_file(file.filename):
+            return jsonify({'error': 'File type not allowed'}), 400
+        
+        # Save file
+        file_info = save_file(file)
+        if not file_info:
+            return jsonify({'error': 'Failed to save file'}), 500
+        
+        return jsonify({
+            'status': 'success',
+            'file_info': file_info
+        })
+        
+    except Exception as e:
+        logger.error(f"Error uploading file: {e}")
+        return jsonify({'error': 'Upload failed'}), 500
+
+@app.route('/api/tickets/with-attachment', methods=['POST'])
+def create_ticket_with_attachment():
+    """Create ticket with file attachment"""
+    try:
+        # Get form data
+        data = {
+            'name': request.form.get('name'),
+            'email': request.form.get('email'),
+            'category_id': request.form.get('category_id'),
+            'subject': request.form.get('subject'),
+            'message': request.form.get('message')
+        }
+        
+        # Validate required fields
+        if not all([data['name'], data['email'], data['category_id'], data['message']]):
+            return jsonify({'error': 'Missing required fields'}), 400
+        
+        # Create or get user
+        user = User.query.filter_by(Email=data['email']).first()
+        if not user:
+            user = User(Name=data['name'], Email=data['email'])
+            db.session.add(user)
+            db.session.flush()
+        
+        # Create ticket
+        ticket = Ticket(
+            UserID=user.UserID,
+            CategoryID=int(data['category_id']),
+            Subject=data.get('subject', 'Support Request'),
+            Status='open'
+        )
+        db.session.add(ticket)
+        db.session.flush()
+        
+        # Create message
+        message = Message(
+            TicketID=ticket.TicketID,
+            SenderID=user.UserID,
+            Content=data['message'],
+            IsAdminReply=False
+        )
+        db.session.add(message)
+        db.session.flush()
+        
+        # Handle file attachment if present
+        if 'file' in request.files and request.files['file'].filename != '':
+            file = request.files['file']
+            if allowed_file(file.filename):
+                file_info = save_file(file)
+                if file_info:
+                    attachment = Attachment(
+                        MessageID=message.MessageID,
+                        OriginalName=file_info['original_name'],
+                        StoredName=file_info['stored_name'],
+                        FileSize=file_info['file_size'],
+                        MimeType=file_info['mime_type']                    )
+                    db.session.add(attachment)
+        
+        db.session.commit()
+        
+        return jsonify({
+            'ticket_id': ticket.TicketID,
+            'user_id': user.UserID if user else None,
+            'status': 'success',
+            'message': 'Ticket created successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error creating ticket with attachment: {e}")
+        db.session.rollback()
+        return jsonify({'error': 'Failed to create ticket'}), 500
+
+@app.route('/api/tickets/<int:ticket_id>/messages/with-attachment', methods=['POST'])
+def add_message_with_attachment(ticket_id):
+    """Add message to existing ticket with optional attachment"""
+    try:
+        # Get form data
+        content = request.form.get('content')
+        user_id = request.form.get('user_id')
+        is_admin = request.form.get('is_admin', 'false').lower() == 'true'
+        
+        if not content:
+            return jsonify({'error': 'Message content required'}), 400
+        
+        # Create message
+        message = Message(
+            TicketID=ticket_id,
+            SenderID=int(user_id) if user_id else None,
+            Content=content,
+            IsAdminReply=is_admin
+        )
+        db.session.add(message)
+        db.session.flush()
+        
+        # Handle file attachment if present
+        if 'file' in request.files and request.files['file'].filename != '':
+            file = request.files['file']
+            if allowed_file(file.filename):
+                file_info = save_file(file)
+                if file_info:
+                    attachment = Attachment(
+                        MessageID=message.MessageID,
+                        OriginalName=file_info['original_name'],
+                        StoredName=file_info['stored_name'],
+                        FileSize=file_info['file_size'],
+                        MimeType=file_info['mime_type']
+                    )
+                    db.session.add(attachment)
+        
+        # Update ticket timestamp
+        ticket = Ticket.query.get(ticket_id)
+        if ticket:
+            ticket.UpdatedAt = datetime.utcnow()
+            if is_admin and ticket.Status == 'open':
+                ticket.Status = 'in_progress'
+        
+        db.session.commit()
+        
+        return jsonify({
+            'status': 'success',
+            'message_id': message.MessageID
+        })
+        
+    except Exception as e:
+        logger.error(f"Error adding message with attachment: {e}")
+        db.session.rollback()
+        return jsonify({'error': 'Failed to add message'}), 500
+
+@app.route('/static/uploads/<filename>')
+def uploaded_file(filename):
+    """Serve uploaded files"""
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 @app.route('/admin')
 def admin_dashboard():
@@ -514,6 +792,8 @@ def get_admin_tickets():
 @app.route('/api/admin/tickets/<int:ticket_id>', methods=['GET'])
 def get_admin_ticket_details(ticket_id):
     try:
+        logger.info(f"Loading admin ticket details for ticket ID: {ticket_id}")
+        
         ticket = db.session.query(Ticket, User, Category).join(
             User, Ticket.UserID == User.UserID, isouter=True
         ).join(
@@ -521,12 +801,44 @@ def get_admin_ticket_details(ticket_id):
         ).filter(Ticket.TicketID == ticket_id).first()
         
         if not ticket:
+            logger.error(f"Ticket {ticket_id} not found")
             return jsonify({"error": "Ticket not found"}), 404
         
         ticket_obj, user, category = ticket
+        logger.info(f"Found ticket {ticket_id}: {ticket_obj.Subject}")
         
-        # Get messages
+        # Get messages with attachments
         messages = Message.query.filter_by(TicketID=ticket_id).order_by(Message.CreatedAt).all()
+        logger.info(f"Found {len(messages)} messages for ticket {ticket_id}")
+        
+        # Build message list with attachment information
+        message_list = []
+        for msg in messages:
+            # Get attachments for this message
+            attachments = Attachment.query.filter_by(MessageID=msg.MessageID).all()
+            logger.info(f"Message {msg.MessageID} has {len(attachments)} attachments")
+            
+            message_data = {
+                'content': msg.Content,
+                'is_admin': msg.IsAdminReply,
+                'created_at': msg.CreatedAt.isoformat(),
+                'attachments': [{
+                    'id': att.AttachmentID,
+                    'original_name': att.OriginalName,
+                    'url': f'/static/uploads/{att.StoredName}',
+                    'file_path': f'/static/uploads/{att.StoredName}',
+                    'filename': att.StoredName,
+                    'file_size': att.FileSize,
+                    'mime_type': att.MimeType
+                } for att in attachments]
+            }
+            
+            # Add attachment_url for backward compatibility
+            if attachments:
+                message_data['attachment_url'] = f'/static/uploads/{attachments[0].StoredName}'
+                logger.info(f"Added attachment URL: {message_data['attachment_url']}")
+            
+            message_list.append(message_data)
         
         result = {
             'id': ticket_obj.TicketID,
@@ -536,15 +848,13 @@ def get_admin_ticket_details(ticket_id):
             'user_email': user.Email if user else None,
             'status': ticket_obj.Status,
             'created_at': ticket_obj.CreatedAt.isoformat(),
-            'messages': [{
-                'content': msg.Content,
-                'is_admin': msg.IsAdminReply,
-                'created_at': msg.CreatedAt.isoformat()
-            } for msg in messages]
+            'messages': message_list
         }
         
+        logger.info(f"Returning ticket details for {ticket_id} with {len(message_list)} messages")
         return jsonify(result)
     except Exception as e:
+        logger.error(f"Error getting admin ticket details for {ticket_id}: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/admin/active-conversations', methods=['GET'])
@@ -856,9 +1166,26 @@ def get_ticket_details(ticket_id):
             return jsonify({"error": "Ticket not found"}), 404
         
         ticket, user, category = ticket_query
-        
-        # Get messages for this ticket
+          # Get messages for this ticket
         messages = Message.query.filter_by(TicketID=ticket_id).order_by(Message.CreatedAt).all()
+        
+        # Build message list with attachments
+        message_list = []
+        for msg in messages:
+            attachments = Attachment.query.filter_by(MessageID=msg.MessageID).all()
+            message_data = {
+                'content': msg.Content,
+                'is_admin': msg.IsAdminReply,
+                'created_at': msg.CreatedAt.isoformat(),
+                'attachments': [{
+                    'id': att.AttachmentID,
+                    'original_name': att.OriginalName,
+                    'url': f'/static/uploads/{att.StoredName}',
+                    'file_size': att.FileSize,
+                    'mime_type': att.MimeType
+                } for att in attachments]
+            }
+            message_list.append(message_data)
         
         result = {
             'id': ticket.TicketID,
@@ -869,11 +1196,7 @@ def get_ticket_details(ticket_id):
             'user_email': user.Email if user else 'No email',
             'created_at': ticket.CreatedAt.isoformat(),
             'updated_at': ticket.UpdatedAt.isoformat(),
-            'messages': [{
-                'content': msg.Content,
-                'is_admin': msg.IsAdminReply,
-                'created_at': msg.CreatedAt.isoformat()
-            } for msg in messages]
+            'messages': message_list
         }
         
         logger.info(f"Returning ticket details for {ticket_id}: Status={ticket.Status}")

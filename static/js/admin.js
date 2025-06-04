@@ -214,8 +214,28 @@ function filterTickets() {
 
 async function viewTicket(ticketId) {
     try {
+        console.log(`Loading ticket details for ticket ID: ${ticketId}`);
         const response = await fetch(`/api/admin/tickets/${ticketId}`);
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
         const ticket = await response.json();
+        console.log('Ticket data loaded:', ticket);
+
+        // Check if we have messages with attachments
+        if (ticket.messages) {
+            ticket.messages.forEach((msg, index) => {
+                console.log(`Message ${index + 1}:`, {
+                    content: msg.content.substring(0, 50) + '...',
+                    has_attachments: msg.attachments && msg.attachments.length > 0,
+                    attachment_count: msg.attachments ? msg.attachments.length : 0,
+                    attachment_url: msg.attachment_url,
+                    attachments: msg.attachments
+                });
+            });
+        }
 
         document.getElementById('ticket-details').innerHTML = `
             <div class="ticket-info">
@@ -228,15 +248,89 @@ async function viewTicket(ticketId) {
                 <p><strong>Created:</strong> ${formatTime(ticket.created_at)}</p>
                 <div class="ticket-messages">
                     <h6>Messages:</h6>
-                    ${ticket.messages.map(msg => `
+                    ${ticket.messages.map(msg => {
+            console.log('Processing message for rendering:', {
+                hasAttachments: msg.attachments && msg.attachments.length > 0,
+                attachmentUrl: msg.attachment_url,
+                attachmentCount: msg.attachments ? msg.attachments.length : 0
+            });
+
+            return `
                         <div class="message-item ${msg.is_admin ? 'admin' : 'user'}">
                             <div class="message-header">
                                 <strong>${msg.is_admin ? 'Admin' : (ticket.user_name || 'User')}</strong>
                                 <span class="text-muted">${formatTime(msg.created_at)}</span>
                             </div>
                             <div class="message-body">${msg.content}</div>
+                            ${(msg.attachments && msg.attachments.length > 0) || (msg.attachment_url) ? `
+                                <div class="message-attachments">
+                                    <h6 class="mt-2 mb-1"><i class="fas fa-paperclip"></i> Attachments:</h6>
+                                    <div class="attachments-grid">
+                                        ${msg.attachments && msg.attachments.length > 0 ? msg.attachments.map(att => {
+                console.log('Processing attachment:', att);
+                const attachmentUrl = att.url || att.file_path || `/static/uploads/${att.filename || att.stored_name}`;
+                console.log('Final attachment URL:', attachmentUrl);
+
+                return `
+                                            <div class="attachment-item" style="margin: 5px; padding: 10px; border: 1px solid #ddd; border-radius: 8px; display: inline-block;">
+                                                <div class="attachment-preview" style="text-align: center;">
+                                                    <img src="${attachmentUrl}" alt="${att.original_name || att.filename}" 
+                                                         class="attachment-thumbnail" 
+                                                         onclick="openImageModal('${attachmentUrl}', '${att.original_name || att.filename}')" 
+                                                         style="cursor: pointer; max-width: 150px; max-height: 150px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"
+                                                         onerror="console.error('Failed to load image:', this.src); this.style.display='none'; this.nextElementSibling.style.display='block';">
+                                                    <div class="file-icon" style="display: none; font-size: 48px; color: #666;">
+                                                        <i class="fas fa-file-image"></i>
+                                                        <div style="font-size: 12px; margin-top: 5px;">Image not found</div>
+                                                    </div>
+                                                </div>
+                                                <div class="attachment-info" style="text-align: center; margin-top: 5px;">
+                                                    <div><small><strong>${att.original_name || att.filename}</strong></small></div>
+                                                    <div><small class="text-muted">(${formatFileSize(att.file_size || 0)})</small></div>
+                                                    <div>
+                                                        <a href="${attachmentUrl}" target="_blank" class="btn btn-sm btn-outline-primary mt-1">
+                                                            <i class="fas fa-external-link-alt"></i> View
+                                                        </a>
+                                                        <button onclick="testImageUrl('${attachmentUrl}')" class="btn btn-sm btn-outline-info mt-1">
+                                                            <i class="fas fa-search"></i> Test
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            `;
+            }).join('') : ''}
+                                        ${msg.attachment_url ? `
+                                            <div class="attachment-item" style="margin: 5px; padding: 10px; border: 1px solid #ddd; border-radius: 8px; display: inline-block;">
+                                                <div class="attachment-preview" style="text-align: center;">
+                                                    <img src="${msg.attachment_url}" alt="Attachment" 
+                                                         class="attachment-thumbnail" 
+                                                         onclick="openImageModal('${msg.attachment_url}', 'attachment')" 
+                                                         style="cursor: pointer; max-width: 150px; max-height: 150px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"
+                                                         onerror="console.error('Failed to load image:', this.src); this.style.display='none'; this.nextElementSibling.style.display='block';">
+                                                    <div class="file-icon" style="display: none; font-size: 48px; color: #666;">
+                                                        <i class="fas fa-file-image"></i>
+                                                        <div style="font-size: 12px; margin-top: 5px;">Image not found</div>
+                                                    </div>
+                                                </div>
+                                                <div class="attachment-info" style="text-align: center; margin-top: 5px;">
+                                                    <div><small><strong>Attachment</strong></small></div>
+                                                    <div>
+                                                        <a href="${msg.attachment_url}" target="_blank" class="btn btn-sm btn-outline-primary mt-1">
+                                                            <i class="fas fa-external-link-alt"></i> View
+                                                        </a>
+                                                        <button onclick="testImageUrl('${msg.attachment_url}')" class="btn btn-sm btn-outline-info mt-1">
+                                                            <i class="fas fa-search"></i> Test
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                </div>
+                            ` : ''}
                         </div>
-                    `).join('')}
+                        `;
+        }).join('')}
                 </div>
             </div>
         `;
@@ -247,6 +341,7 @@ async function viewTicket(ticketId) {
         currentTicketId = ticketId;
     } catch (error) {
         console.error('Error viewing ticket:', error);
+        showNotification('Error loading ticket details: ' + error.message, 'error');
     }
 }
 
@@ -305,9 +400,7 @@ async function selectConversation(ticketId) {
 async function loadChatMessages(ticketId) {
     try {
         const response = await fetch(`/api/tickets/${ticketId}/messages`);
-        const messages = await response.json();
-
-        const messagesContainer = document.getElementById('admin-chat-messages');
+        const messages = await response.json(); const messagesContainer = document.getElementById('admin-chat-messages');
         messagesContainer.innerHTML = messages.map(msg => `
             <div class="chat-message ${msg.is_admin ? 'admin' : 'user'} fade-in">
                 <div class="message-avatar ${msg.is_admin ? 'admin' : 'user'}">
@@ -315,6 +408,19 @@ async function loadChatMessages(ticketId) {
                 </div>
                 <div class="message-content">
                     ${msg.content}
+                    ${msg.attachments && msg.attachments.length > 0 ? `
+                        <div class="message-attachments">
+                            ${msg.attachments.map(att => `
+                                <div class="attachment-item">
+                                    <img src="${att.url}" alt="${att.original_name}" class="attachment-thumbnail" onclick="openImageModal('${att.url}', '${att.original_name}')">
+                                    <div class="attachment-info">
+                                        <small>${att.original_name}</small>
+                                        <small class="text-muted">(${formatFileSize(att.file_size)})</small>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
                     <div class="message-time">${formatTime(msg.created_at)}</div>
                 </div>
             </div>
@@ -577,4 +683,78 @@ function startChat(ticketId) {
     setTimeout(() => {
         selectConversation(ticketId);
     }, 100);
+}
+
+// Helper function to format file size
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// Function to open image in modal
+function openImageModal(imageUrl, imageName) {
+    // Create modal if it doesn't exist
+    let modal = document.getElementById('imageModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.id = 'imageModal';
+        modal.innerHTML = `
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="imageModalTitle">Image Attachment</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body text-center">
+                        <img id="modalImage" class="img-fluid" style="max-height: 70vh;">
+                    </div>
+                    <div class="modal-footer">
+                        <a id="downloadImageBtn" class="btn btn-primary" download>
+                            <i class="fas fa-download"></i> Download
+                        </a>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+
+    // Update modal content
+    document.getElementById('imageModalTitle').textContent = imageName;
+    document.getElementById('modalImage').src = imageUrl;
+    document.getElementById('downloadImageBtn').href = imageUrl;
+    document.getElementById('downloadImageBtn').download = imageName;
+
+    // Show modal
+    const bootstrapModal = new bootstrap.Modal(modal);
+    bootstrapModal.show();
+}
+
+// Helper function to test image URLs for debugging
+function testImageUrl(url) {
+    console.log('Testing image URL:', url);
+
+    // Test if the URL is reachable
+    fetch(url, { method: 'HEAD' })
+        .then(response => {
+            if (response.ok) {
+                console.log('✅ Image URL is accessible:', url);
+                showNotification(`Image URL is accessible: ${url}`, 'success');
+            } else {
+                console.error('❌ Image URL not accessible:', url, 'Status:', response.status);
+                showNotification(`Image URL not accessible (${response.status}): ${url}`, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('❌ Error testing image URL:', url, error);
+            showNotification(`Error accessing image URL: ${url}`, 'error');
+        });
+
+    // Also try to open in new tab for manual verification
+    window.open(url, '_blank');
 }

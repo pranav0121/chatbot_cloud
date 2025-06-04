@@ -38,11 +38,14 @@
                                 <i class="fas fa-clock text-info"></i>
                                 <span>24/7 Available</span>
                             </div>
-                        </div>
-                        <button class="btn btn-primary btn-lg hero-cta" onclick="openSupportChat()">
+                        </div> <button class="btn btn-primary btn-lg hero-cta" onclick="openSupportChat()">
                             <i class="fas fa-comments"></i>
                             Start Support Chat
                         </button>
+                        <a href="/faq" class="btn btn-outline-primary btn-lg ms-3">
+                            <i class="fas fa-question-circle"></i>
+                            View FAQ
+                        </a>
                     </div>
                 </div>
                 <div class="col-lg-6">
@@ -149,9 +152,23 @@
                         <input type="email" class="form-control" id="user-email" placeholder="Enter your email">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Describe Your Issue *</label>
-                        <textarea class="form-control" id="issue-description" rows="4"
-                            placeholder="Please provide as much detail as possible about your issue..."></textarea>
+                        <label class="form-label">Describe Your Issue *</label> <textarea class="form-control"
+                            id="issue-description" rows="4"
+                            placeholder="Please provide as much detail as possible about your issue... You can also paste images directly here!"></textarea>
+                    </div>
+                    <!-- File Upload Section -->
+                    <div class="mb-3">
+                        <label class="form-label">Attach Screenshot (Optional)</label>
+                        <div class="file-upload-area" id="form-file-upload-area">
+                            <div class="upload-content">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                                <p>Drag & drop files here or click to browse</p>
+                                <small>Supported: JPG, PNG, GIF (Max 10MB)</small>
+                            </div>
+                            <input type="file" id="form-file-input" accept="image/*" multiple style="display: none;">
+                        </div>
+                        <!-- File Preview -->
+                        <div class="file-preview" id="form-file-preview" style="display: none;"></div>
                     </div>
                     <div class="form-actions">
                         <button class="btn btn-outline-secondary btn-sm" onclick="goBackToIssues()">
@@ -194,13 +211,26 @@
                     <i class="fas fa-info-circle me-1"></i>
                     Describe your issue and we'll connect you with support
                 </small>
-            </div>
-
-            <!-- Live Chat Input -->
+            </div> <!-- Live Chat Input -->
             <div class="chat-input-section" id="live-chat-input" style="display: none;">
+                <!-- File Upload Area -->
+                <div class="file-upload-area" id="file-upload-area">
+                    <div class="upload-content">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        <p>Drag & drop files here or click to browse</p>
+                        <small>Supported: JPG, PNG, GIF (Max 10MB)</small>
+                    </div>
+                    <input type="file" id="file-input" accept="image/*" multiple style="display: none;">
+                </div>
+
+                <!-- File Preview -->
+                <div class="file-preview" id="file-preview" style="display: none;"></div>
+
                 <div class="input-group">
-                    <input type="text" class="form-control" id="message-input" placeholder="Type your message..."
-                        onkeypress="handleChatEnter(event)">
+                    <button class="btn btn-outline-secondary" id="attach-btn" type="button" title="Attach File">
+                        <i class="fas fa-paperclip"></i>
+                    </button> <input type="text" class="form-control" id="live-chat-message-input"
+                        placeholder="Type your message or paste an image..." onkeypress="handleChatEnter(event)">
                     <button class="btn btn-primary" onclick="sendMessage()">
                         <i class="fas fa-paper-plane"></i>
                     </button>

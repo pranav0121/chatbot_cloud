@@ -293,13 +293,6 @@ async function selectCategory(categoryId, categoryName) {
 
         hideAllChatSections();
 
-        // Always show the text input for custom questions
-        document.getElementById('category-input').style.display = 'block';
-
-        // Update the input placeholder
-        const input = document.getElementById('category-message-input');
-        input.placeholder = `Type your ${categoryName.toLowerCase()} question here...`;
-
         let queries = [];
 
         if (response.ok) {
@@ -316,18 +309,51 @@ async function selectCategory(categoryId, categoryName) {
             showNoCommonIssues();
         }
 
+        // Always show the text input for custom questions after showing common issues
+        setTimeout(() => {
+            const categoryInputDiv = document.getElementById('category-input');
+            if (categoryInputDiv) {
+                categoryInputDiv.style.display = 'block';
+                console.log('Category input section shown');
+
+                // Update the input placeholder
+                const input = document.getElementById('category-message-input');
+                if (input) {
+                    input.placeholder = `Type your ${categoryName.toLowerCase()} question here...`;
+                    input.focus();
+                }
+            } else {
+                console.error('Category input element not found!');
+            }
+        }, 200);
+
     } catch (error) {
         console.error('Error loading common queries:', error);
-        hideAllChatSections();
-        document.getElementById('category-input').style.display = 'block';
-
-        // Try to show fallback queries
+        hideAllChatSections();        // Try to show fallback queries
         const fallbackQueries = getFallbackQueries(categoryName);
         if (fallbackQueries.length > 0) {
             showCommonIssues(fallbackQueries);
         } else {
             showNoCommonIssues();
         }
+
+        // Always show the text input for custom questions
+        setTimeout(() => {
+            const categoryInputDiv = document.getElementById('category-input');
+            if (categoryInputDiv) {
+                categoryInputDiv.style.display = 'block';
+                console.log('Category input section shown (fallback)');
+
+                // Update the input placeholder
+                const input = document.getElementById('category-message-input');
+                if (input) {
+                    input.placeholder = `Type your ${categoryName.toLowerCase()} question here...`;
+                    input.focus();
+                }
+            } else {
+                console.error('Category input element not found! (fallback)');
+            }
+        }, 200);
     }
 }
 
@@ -557,10 +583,17 @@ async function createTicketWithMessage(message) {
         if (debugMode) {
             console.log('Response Data:', data);
             console.groupEnd();
-        }
-
-        if (data.status === 'success') {
+        } if (data.status === 'success') {
             currentTicketId = data.ticket_id;
+
+            // Store the user_id in currentUser object for future message sending
+            if (data.user_id && currentUser) {
+                currentUser.id = data.user_id;
+                if (debugMode) {
+                    console.log('Updated currentUser with ID:', currentUser.id);
+                }
+            }
+
             showNotification('Ticket created successfully!', 'success');
             startLiveChat(message);
 
@@ -749,8 +782,11 @@ function createChatMessageHTML(content, type, timestamp) {
 
 // Send message in live chat
 async function sendMessage() {
-    const input = document.getElementById('message-input');
-    const message = input.value.trim();
+    // Try to get message from either input field
+    const messageInput = document.getElementById('message-input');
+    const liveChatInput = document.getElementById('live-chat-message-input');
+    const input = liveChatInput || messageInput;
+    const message = input ? input.value.trim() : '';
 
     if (!message || !currentTicketId) return;
 
@@ -1278,3 +1314,637 @@ function showFeedbackModal() {
     const bootstrapModal = new bootstrap.Modal(feedbackModal);
     bootstrapModal.show();
 }
+
+// File Upload Functionality
+let selectedFiles = [];
+let dragCounter = 0;
+
+function initializeFileUpload() {
+    // Initialize both form and chat file upload areas
+    initializeFormFileUpload();
+    initializeChatFileUpload();
+}
+
+function initializeFormFileUpload() {
+    const fileInput = document.getElementById('form-file-input');
+    const fileUploadArea = document.getElementById('form-file-upload-area');
+    const filePreview = document.getElementById('form-file-preview');
+
+    if (!fileInput || !fileUploadArea || !filePreview) {
+        console.warn('Form file upload elements not found, skipping initialization');
+        return;
+    }
+
+    // File input change
+    fileInput.addEventListener('change', (e) => handleFileSelect(e, 'form'));
+
+    // Drag and drop events
+    fileUploadArea.addEventListener('dragenter', handleDragEnter);
+    fileUploadArea.addEventListener('dragover', handleDragOver);
+    fileUploadArea.addEventListener('dragleave', handleDragLeave);
+    fileUploadArea.addEventListener('drop', (e) => handleFileDrop(e, 'form'));
+
+    // Click to browse
+    fileUploadArea.addEventListener('click', () => {
+        fileInput.click();
+    });
+}
+
+function initializeChatFileUpload() {
+    const fileInput = document.getElementById('file-input');
+    const fileUploadArea = document.getElementById('file-upload-area');
+    const filePreview = document.getElementById('file-preview');
+    const attachButton = document.getElementById('attach-btn');
+
+    if (!fileInput || !fileUploadArea || !filePreview || !attachButton) {
+        console.warn('Chat file upload elements not found, skipping initialization');
+        return;
+    }
+
+    // Attach button click
+    attachButton.addEventListener('click', () => {
+        fileInput.click();
+    });
+
+    // File input change
+    fileInput.addEventListener('change', (e) => handleFileSelect(e, 'chat'));
+
+    // Drag and drop events
+    fileUploadArea.addEventListener('dragenter', handleDragEnter);
+    fileUploadArea.addEventListener('dragover', handleDragOver);
+    fileUploadArea.addEventListener('dragleave', handleDragLeave);
+    fileUploadArea.addEventListener('drop', (e) => handleFileDrop(e, 'chat'));
+
+    // Click to browse
+    fileUploadArea.addEventListener('click', () => {
+        fileInput.click();
+    });
+}
+
+function handleDragEnter(e) {
+    e.preventDefault();
+    dragCounter++;
+    const fileUploadArea = document.getElementById('file-upload-area');
+    fileUploadArea.classList.add('drag-active');
+}
+
+function handleDragOver(e) {
+    e.preventDefault();
+}
+
+function handleDragLeave(e) {
+    e.preventDefault();
+    dragCounter--;
+    if (dragCounter === 0) {
+        const fileUploadArea = document.getElementById('file-upload-area');
+        fileUploadArea.classList.remove('drag-active');
+    }
+}
+
+function handleFileDrop(e, context = 'chat') {
+    e.preventDefault();
+    dragCounter = 0;
+    const fileUploadArea = document.getElementById(context === 'form' ? 'form-file-upload-area' : 'file-upload-area');
+    fileUploadArea.classList.remove('drag-active');
+
+    const files = Array.from(e.dataTransfer.files);
+    processFiles(files, context);
+}
+
+function handleFileSelect(e, context = 'chat') {
+    const files = Array.from(e.target.files);
+    processFiles(files, context);
+}
+
+function processFiles(files, context = 'chat') {
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/bmp', 'image/webp'];
+    const maxSize = 10 * 1024 * 1024; // 10MB
+
+    files.forEach(file => {
+        // Validate file type
+        if (!allowedTypes.includes(file.type)) {
+            showErrorMessage(`File type not supported: ${file.name}. Please upload images only.`);
+            return;
+        }
+
+        // Validate file size
+        if (file.size > maxSize) {
+            showErrorMessage(`File too large: ${file.name}. Maximum size is 10MB.`);
+            return;
+        }
+
+        // Add to selected files
+        selectedFiles.push(file);
+        displayFilePreview(file, context);
+    });
+
+    // Update upload area visibility
+    updateFileUploadArea(context);
+}
+
+function displayFilePreview(file, context = 'chat') {
+    const filePreview = document.getElementById(context === 'form' ? 'form-file-preview' : 'file-preview');
+
+    const fileItem = document.createElement('div');
+    fileItem.className = 'file-item';
+    fileItem.innerHTML = `
+        <div class="file-info">
+            <img src="${URL.createObjectURL(file)}" alt="Preview" class="file-thumbnail">
+            <div class="file-details">
+                <span class="file-name">${file.name}</span>
+                <span class="file-size">${formatFileSize(file.size)}</span>
+            </div>
+        </div>
+        <button type="button" class="btn-remove" onclick="removeFile('${file.name}', '${context}')">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+
+    filePreview.appendChild(fileItem);
+}
+
+function removeFile(fileName, context = 'chat') {
+    selectedFiles = selectedFiles.filter(file => file.name !== fileName);
+
+    const filePreview = document.getElementById(context === 'form' ? 'form-file-preview' : 'file-preview');
+    const fileItems = filePreview.querySelectorAll('.file-item');
+
+    fileItems.forEach(item => {
+        const fileNameElement = item.querySelector('.file-name');
+        if (fileNameElement && fileNameElement.textContent === fileName) {
+            // Revoke object URL to prevent memory leaks
+            const img = item.querySelector('.file-thumbnail');
+            if (img && img.src.startsWith('blob:')) {
+                URL.revokeObjectURL(img.src);
+            }
+            item.remove();
+        }
+    });
+
+    updateFileUploadArea(context);
+}
+
+function updateFileUploadArea(context = 'chat') {
+    const fileUploadArea = document.getElementById(context === 'form' ? 'form-file-upload-area' : 'file-upload-area');
+    const filePreview = document.getElementById(context === 'form' ? 'form-file-preview' : 'file-preview');
+
+    if (selectedFiles.length > 0) {
+        fileUploadArea.style.display = 'none';
+        filePreview.style.display = 'block';
+    } else {
+        fileUploadArea.style.display = 'block';
+        filePreview.style.display = 'none';
+    }
+}
+
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function clearFileSelection() {
+    // Revoke all object URLs to prevent memory leaks
+    selectedFiles.forEach(file => {
+        // Clear both form and chat file previews
+        ['form-file-preview', 'file-preview'].forEach(previewId => {
+            const filePreview = document.getElementById(previewId);
+            if (filePreview) {
+                const fileItems = filePreview.querySelectorAll('.file-item');
+                fileItems.forEach(item => {
+                    const img = item.querySelector('.file-thumbnail');
+                    if (img && img.src.startsWith('blob:')) {
+                        URL.revokeObjectURL(img.src);
+                    }
+                });
+            }
+        });
+    });
+
+    selectedFiles = [];
+
+    // Clear both file previews
+    ['form-file-preview', 'file-preview'].forEach(previewId => {
+        const filePreview = document.getElementById(previewId);
+        if (filePreview) {
+            filePreview.innerHTML = '';
+        }
+    });
+
+    // Update both upload areas
+    updateFileUploadArea('form');
+    updateFileUploadArea('chat');
+
+    // Reset both file inputs
+    ['form-file-input', 'file-input'].forEach(inputId => {
+        const fileInput = document.getElementById(inputId);
+        if (fileInput) {
+            fileInput.value = '';
+        }
+    });
+}
+
+// Modified submitTicket function to handle file uploads
+async function submitTicketWithAttachment(ticketData) {
+    try {
+        const formData = new FormData();
+
+        // Add text data
+        formData.append('name', ticketData.name);
+        formData.append('email', ticketData.email);
+        formData.append('category_id', ticketData.category_id);
+        formData.append('subject', ticketData.subject);
+        formData.append('message', ticketData.message);
+
+        // Add file if selected
+        if (selectedFiles.length > 0) {
+            formData.append('file', selectedFiles[0]); // For now, handle one file
+        }
+
+        const response = await fetch('/api/tickets/with-attachment', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        if (result.status === 'success') {
+            currentTicketId = result.ticket_id;
+
+            // Store the user_id in currentUser object for future message sending
+            if (result.user_id && currentUser) {
+                currentUser.id = result.user_id;
+                console.log('Updated currentUser with ID from attachment upload:', currentUser.id);
+            }
+
+            clearFileSelection();
+            return result;
+        } else {
+            throw new Error(result.message || 'Failed to create ticket');
+        }
+
+    } catch (error) {
+        logError('submitTicketWithAttachment', error, ticketData);
+        throw error;
+    }
+}
+
+// Modified sendMessage function to handle file uploads
+async function sendMessageWithAttachment(content, isAdmin = false) {
+    try {
+        if (!currentTicketId) {
+            throw new Error('No active ticket');
+        }
+
+        const formData = new FormData();
+        formData.append('content', content);
+        formData.append('user_id', currentUser?.id || '');
+        formData.append('is_admin', isAdmin.toString());
+
+        // Add file if selected
+        if (selectedFiles.length > 0) {
+            formData.append('file', selectedFiles[0]); // For now, handle one file
+        }
+
+        const response = await fetch(`/api/tickets/${currentTicketId}/messages/with-attachment`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        if (result.status === 'success') {
+            clearFileSelection();
+            return result;
+        } else {
+            throw new Error(result.message || 'Failed to send message');
+        }
+
+    } catch (error) {
+        logError('sendMessageWithAttachment', error, { content, isAdmin });
+        throw error;
+    }
+}
+
+// Update the existing submitTicket function to use file upload when files are selected
+const originalSubmitTicket = window.submitTicket;
+window.submitTicket = async function (ticketData) {
+    if (selectedFiles.length > 0) {
+        return await submitTicketWithAttachment(ticketData);
+    } else {
+        return await originalSubmitTicket(ticketData);
+    }
+};
+
+// Update the existing sendMessage function to use file upload when files are selected
+const originalSendMessage = window.sendMessage;
+window.sendMessage = async function (content, isAdmin = false) {
+    if (selectedFiles.length > 0) {
+        return await sendMessageWithAttachment(content, isAdmin);
+    } else {
+        return await originalSendMessage(content, isAdmin);
+    }
+};
+
+// Initialize file upload when DOM is loaded
+document.addEventListener('DOMContentLoaded', function () {
+    // Add a small delay to ensure all elements are rendered
+    setTimeout(() => {
+        initializeFileUpload();
+        initializePasteHandler();
+    }, 100);
+});
+
+// Paste handling functionality
+function initializePasteHandler() {
+    // Add paste event listener to message input fields
+    const messageInput = document.getElementById('message-input');
+    const liveChatInput = document.getElementById('live-chat-message-input');
+    const categoryInput = document.getElementById('category-message-input');
+    const issueDescInput = document.getElementById('issue-description');
+
+    if (liveChatInput) {
+        liveChatInput.addEventListener('paste', handlePaste);
+        console.log('Added paste handler to live chat input');
+    }
+    if (categoryInput) {
+        categoryInput.addEventListener('paste', handlePaste);
+        console.log('Added paste handler to category input');
+    }
+    if (issueDescInput) {
+        issueDescInput.addEventListener('paste', handlePaste);
+        console.log('Added paste handler to issue description');
+    }
+    if (messageInput) {
+        messageInput.addEventListener('paste', handlePaste);
+        console.log('Added paste handler to message input');
+    }
+
+    // Also add to the chat body for broader paste support
+    const chatBody = document.querySelector('.chat-body');
+    if (chatBody) {
+        chatBody.addEventListener('paste', handlePaste);
+        // Make chat body focusable for paste events
+        chatBody.setAttribute('tabindex', '0');
+        console.log('Added paste handler to chat body');
+    }
+
+    console.log('Paste handler initialization complete');
+}
+
+function handlePaste(event) {
+    console.log('Paste event triggered:', event);
+
+    const clipboardItems = event.clipboardData || event.originalEvent.clipboardData;
+
+    if (!clipboardItems) {
+        console.log('No clipboard data found');
+        return;
+    }
+
+    const items = clipboardItems.items;
+    let hasImage = false;
+
+    console.log('Clipboard items:', items.length);
+
+    for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        console.log('Item type:', item.type);
+
+        // Check if the item is an image
+        if (item.type.indexOf('image') !== -1) {
+            hasImage = true;
+            event.preventDefault(); // Prevent default paste behavior
+
+            console.log('Image detected in clipboard');
+            const file = item.getAsFile();
+            if (file) {
+                console.log('File obtained from clipboard:', file.name, file.size);
+                handlePastedImage(file);
+            }
+            break;
+        }
+    }
+    // If no image was pasted, allow normal text paste
+    if (!hasImage) {
+        console.log('No image found in clipboard, allowing normal paste');
+        return;
+    }
+}
+
+function handlePastedImage(file) {
+    console.log('Processing pasted image:', file);
+
+    // Validate file size
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (file.size > maxSize) {
+        showNotification('Image too large. Maximum size is 10MB.', 'error');
+        return;
+    }
+
+    // Clear existing file selection and add the pasted image
+    clearFileSelection();
+    selectedFiles = [file];
+
+    console.log('Selected files updated:', selectedFiles);
+
+    // Show inline preview in chat
+    displayInlinePastedImage(file);
+
+    // Update file upload areas
+    updateFileUploadArea('chat');
+    updateFileUploadArea('form');
+
+    // Show file preview in designated preview areas
+    displayFilePreview(file, 'chat');
+
+    // Show success message
+    showNotification('Image pasted successfully! You can now send your message.', 'success');
+
+    // Focus on the appropriate input field
+    setTimeout(() => {
+        const activeInput = document.activeElement;
+        if (activeInput && (activeInput.tagName === 'INPUT' || activeInput.tagName === 'TEXTAREA')) {
+            activeInput.focus();
+        } else {
+            // Focus on the most appropriate message input based on current state
+            const messageInput = document.getElementById('live-chat-message-input') ||
+                document.getElementById('category-message-input') ||
+                document.getElementById('message-input');
+            if (messageInput && messageInput.style.display !== 'none') {
+                messageInput.focus();
+            }
+        }
+    }, 100);
+}
+
+function displayInlinePastedImage(file) {
+    // Find the appropriate container for the preview
+    let chatContainer = document.getElementById('chat-messages-container') ||
+        document.querySelector('.chat-messages') ||
+        document.querySelector('.messages');
+
+    if (!chatContainer) {
+        console.warn('No chat container found, creating temporary preview');
+        // Create a temporary preview area if no chat container exists
+        const chatBody = document.querySelector('.chat-body');
+        if (chatBody) {
+            let tempPreview = document.getElementById('temp-image-preview');
+            if (!tempPreview) {
+                tempPreview = document.createElement('div');
+                tempPreview.id = 'temp-image-preview';
+                tempPreview.style.cssText = 'margin: 10px; padding: 10px; background: #f8f9fa; border-radius: 8px;';
+                chatBody.appendChild(tempPreview);
+            }
+            chatContainer = tempPreview;
+        } else {
+            return; // Can't display preview
+        }
+    }
+
+    // Remove any existing pasted image preview
+    const existingPreview = chatContainer.querySelector('.pasted-image-preview');
+    if (existingPreview) {
+        const img = existingPreview.querySelector('.pasted-image-thumbnail');
+        if (img && img.src.startsWith('blob:')) {
+            URL.revokeObjectURL(img.src);
+        }
+        existingPreview.remove();
+    }
+
+    // Create preview message
+    const previewMessage = document.createElement('div');
+    previewMessage.className = 'message user-message pasted-image-preview';
+    previewMessage.innerHTML = `
+        <div class="message-content">
+            <div class="pasted-image-container">
+                <div class="pasted-image-header">
+                    <i class="fas fa-paperclip text-primary"></i>
+                    <span>Pasted Image: ${file.name || 'clipboard-image.png'}</span>
+                    <button class="btn btn-sm btn-outline-danger ms-2" onclick="removePastedImage(this)">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="pasted-image-preview-content">
+                    <img src="${URL.createObjectURL(file)}" alt="Pasted image" class="pasted-image-thumbnail" style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 1px solid #ddd;">
+                </div>
+                <div class="pasted-image-info">
+                    <small class="text-muted">Size: ${formatFileSize(file.size)} | Ready to send</small>
+                </div>
+            </div>
+        </div>
+        <div class="message-time">${new Date().toLocaleTimeString()}</div>
+    `;
+
+    // Add the preview to the container
+    chatContainer.appendChild(previewMessage);
+
+    // Scroll to show the preview
+    previewMessage.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    console.log('Pasted image preview displayed');
+}
+
+function removePastedImage(button) {
+    // Remove the preview message
+    const previewMessage = button.closest('.pasted-image-preview');
+    if (previewMessage) {
+        // Revoke object URL to prevent memory leaks
+        const img = previewMessage.querySelector('.pasted-image-thumbnail');
+        if (img && img.src.startsWith('blob:')) {
+            URL.revokeObjectURL(img.src);
+        }
+        previewMessage.remove();
+    }
+
+    // Clear selected files
+    clearFileSelection();
+
+    showInfoMessage('Image removed. You can paste another image if needed.');
+}
+
+function showSuccessMessage(message) {
+    showNotification(message, 'success');
+}
+
+function showInfoMessage(message) {
+    showNotification(message, 'info');
+}
+
+function showNotification(message, type = 'info') {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `alert alert-${type} alert-dismissible fade show notification-toast`;
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+        max-width: 400px;
+        animation: slideInRight 0.3s ease-out;
+    `;
+
+    notification.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+
+    document.body.appendChild(notification);
+
+    // Auto remove after 3 seconds
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.remove();
+        }
+    }, 3000);
+}
+
+// Enhanced sendMessage function to handle pasted images
+const originalSendMessageFunction = window.sendMessage;
+window.sendMessage = async function (content, isAdmin = false) {
+    // Get the actual message content from input if not provided
+    if (!content) {
+        const messageInput = document.getElementById('message-input') || document.getElementById('live-chat-message-input');
+        content = messageInput ? messageInput.value.trim() : '';
+    }
+
+    // If there are selected files (including pasted images), use file upload
+    if (selectedFiles.length > 0) {
+        try {
+            const result = await sendMessageWithAttachment(content, isAdmin);
+
+            // Clear the pasted image preview
+            const pastedPreviews = document.querySelectorAll('.pasted-image-preview');
+            pastedPreviews.forEach(preview => {
+                const img = preview.querySelector('.pasted-image-thumbnail');
+                if (img && img.src.startsWith('blob:')) {
+                    URL.revokeObjectURL(img.src);
+                }
+                preview.remove();
+            });
+
+            // Clear message input
+            const messageInput = document.getElementById('message-input') || document.getElementById('live-chat-message-input');
+            if (messageInput) {
+                messageInput.value = '';
+            }
+
+            return result;
+        } catch (error) {
+            showErrorMessage('Failed to send message with image. Please try again.');
+            throw error;
+        }
+    } else {
+        // Use original send message function
+        return await originalSendMessageFunction(content, isAdmin);
+    }
+};

@@ -1,5 +1,4 @@
 from flask import Flask, render_template, request, jsonify, send_from_directory
-from flask import Flask, render_template, request, jsonify, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 import pyodbc
@@ -16,7 +15,16 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.config.from_object(Config)
+config_obj = Config()
+app.config.from_object(config_obj)
+
+# Set the database URI properly
+try:
+    app.config['SQLALCHEMY_DATABASE_URI'] = config_obj.SQLALCHEMY_DATABASE_URI
+except Exception as e:
+    logger.warning(f"Failed to set SQL Server URI, falling back to SQLite: {e}")
+    app.config['SQLALCHEMY_DATABASE_URI'] = config_obj.SQLALCHEMY_DATABASE_URI_FALLBACK
+
 db = SQLAlchemy(app)
 
 # Add proper session management to prevent connection pool exhaustion

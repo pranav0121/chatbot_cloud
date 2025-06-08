@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+
+{% block title %}{{ _('Privacy Policy') }} - YouCloudPay Devshop{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <!-- Header -->
+    <div class="text-center mb-12">
+        <h1 class="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
+            {{ _('Privacy Policy') }}
+        </h1>
+        <p class="text-lg text-gray-600">
+            {{ _('Last updated: January 1, 2024') }}
+        </p>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-xl p-8 md:p-12">
+        <!-- Introduction -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold text-gray-900 mb-6">{{ _('Introduction') }}</h2>
+            <p class="text-gray-600 leading-relaxed mb-4">
+                {{ _('At YouCloudPay Devshop ("we," "our," or "us"), we are committed to protecting your privacy and
+                ensuring the security of your personal information. This Privacy Policy explains how we collect, use,
+                disclose, and safeguard your information when you use our customer support chatbot system and related
+                services.') }}
+            </p>
+            <p class="text-gray-600 leading-relaxed">
+                {{ _('By using our services, you agree to the collection and use of information in accordance with this
+                policy. If you do not agree with our policies and practices, do not use our services.') }}
+            </p>
+        </section>
+
+        <!-- Information We Collect -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold text-gray-900 mb-6">{{ _('Information We Collect') }}</h2>
+
+            <div class="space-y-6">
+                <div>
+                    <h3 class="text-xl font-semibold text-gray-900 mb-3">{{ _('Personal Information') }}</h3>
+                    <p class="text-gray-600 leading-relaxed mb-3">
+                        {{ _('We may collect personal information that you voluntarily provide to us, including:') }}
+                    </p>
+                    <ul class="list-disc list-inside text-gray-600 space-y-2 ml-4">
+                        <li>{{ _('Name and contact information (email address, phone number)') }}</li>
+                        <li>{{ _('Account credentials (username, password)') }}</li>
+                        <li>{{ _('Profile information and preferences') }}</li>
+                        <li>{{ _('Support ticket information and chat messages') }}</li>
+                        <li>{{ _('Files and attachments you upload') }}</li>
+                    </ul>
+                </div>
+
+                <div>
+                    <h3 class="text-xl font-semibold text-gray-900 mb-3">{{ _('Automatically Collected Information') }}
+                    </h3>
+                    <p class="text-gray-600 leading-relaxed mb-3">
+                        {{ _('When you use our services, we may automatically collect:') }}
+                    </p>
+                    <ul class="list-disc list-inside text-gray-600 space-y-2 ml-4">
+                        <li>{{ _('Device information (IP address, browser type, operating system)') }}</li>
+                        <li>{{ _('Usage data (pages visited, time spent, features used)') }}</li>
+                        <li>{{ _('Log files and error reports') }}</li>
+                        <li>{{ _('Cookies and similar tracking technologies') }}</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- How We Use Information -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold text-gray-900 mb-6">{{ _('How We Use Your Information') }}</h2>
+            <p class="text-gray-600 leading-relaxed mb-4">
+                {{ _('We use the information we collect for various purposes, including:') }}
+            </p>
+            <ul class="list-disc list-inside text-gray-600 space-y-2 ml-4">
+                <li>{{ _('Providing and maintaining our customer support services') }}</li>
+                <li>{{ _('Processing and responding to your support requests') }}</li>
+                <li>{{ _('Personalizing your experience and improving our services') }}</li>
+                <li>{{ _('Communicating with you about updates, changes, or important notices') }}</li>
+                <li>{{ _('Analyzing usage patterns to enhance our platform') }}</li>
+                <li>{{ _('Detecting and preventing fraud or security breaches') }}</li>
+                <li>{{ _('Complying with legal obligations and resolving disputes') }}</li>
+            </ul>
+        </section>
+
+        <!-- Information Sharing -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold text-gray-900 mb-6">{{ _('Information Sharing and Disclosure') }}</h2>
+            <p class="text-gray-600 leading-relaxed mb-4">
+                {{ _('We do not sell, trade, or rent your personal information to third parties. We may share your
+                information in the following circumstances:') }}
+            </p>
+
+            <div class="space-y-4">
+                <div class="bg-gray-50 p-4 rounded-lg">
+                    <h4 class="font-semibold text-gray-900 mb-2">{{ _('Service Providers') }}</h4>
+                    <p class="text-gray-600 text-sm">
+                        {{ _('We may share information with trusted third-party service providers who assist us in
+                        operating our platform, such as cloud hosting, analytics, and translation services.') }}
+                    </p>
+                </div>
+
+                <div class="bg-gray-50 p-4 rounded-lg">
+                    <h4 class="font-semibold text-gray-900 mb-2">{{ _('Legal Requirements') }}</h4>
+                    <p class="text-gray-600 text-sm">
+                        {{ _('We may disclose information if required by law, court order, or government regulation, or
+                        to protect our rights, safety, and property.') }}
+                    </p>
+                </div>
+
+                <div class="bg-gray-50 p-4 rounded-lg">
+                    <h4 class="font-semibold text-gray-900 mb-2">{{ _('Business Transfers') }}</h4>
+                    <p class="text-gray-600 text-sm">
+                        {{ _('In the event of a merger, acquisition, or sale of assets, your information may be
+                        transferred to the new entity.') }}
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Data Security -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold text-gray-900 mb-6">{{ _('Data Security') }}</h2>
+            <p class="text-gray-600 leading-relaxed mb-4">
+                {{ _('We implement appropriate technical and organizational security measures to protect your personal
+                information against unauthorized access, alteration, disclosure, or destruction. These measures
+                include:') }}
+            </p>
+            <ul class="list-disc list-inside text-gray-600 space-y-2 ml-4">
+                <li>{{ _('Encryption of data in transit and at rest') }}</li>
+                <li>{{ _('Regular security assessments and monitoring') }}</li>
+                <li>{{ _('Access controls and authentication mechanisms') }}</li>
+                <li>{{ _('Employee training on data protection practices') }}</li>
+                <li>{{ _('Secure backup and disaster recovery procedures') }}</li>
+            </ul>
+        </section>
+
+        <!-- Data Retention -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold text-gray-900 mb-6">{{ _('Data Retention') }}</h2>
+            <p class="text-gray-600 leading-relaxed">
+                {{ _('We retain your personal information only for as long as necessary to fulfill the purposes outlined
+                in this Privacy Policy, unless a longer retention period is required or permitted by law. When we no
+                longer need your information, we will securely delete or anonymize it.') }}
+            </p>
+        </section>
+
+        <!-- Your Rights -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold text-gray-900 mb-6">{{ _('Your Privacy Rights') }}</h2>
+            <p class="text-gray-600 leading-relaxed mb-4">
+                {{ _('Depending on your location, you may have the following rights regarding your personal
+                information:') }}
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="bg-blue-50 p-4 rounded-lg">
+                    <h4 class="font-semibold text-blue-900 mb-2">{{ _('Access') }}</h4>
+                    <p class="text-blue-800 text-sm">{{ _('Request copies of your personal information') }}</p>
+                </div>
+                <div class="bg-green-50 p-4 rounded-lg">
+                    <h4 class="font-semibold text-green-900 mb-2">{{ _('Rectification') }}</h4>
+                    <p class="text-green-800 text-sm">{{ _('Request correction of inaccurate information') }}</p>
+                </div>
+                <div class="bg-yellow-50 p-4 rounded-lg">
+                    <h4 class="font-semibold text-yellow-900 mb-2">{{ _('Erasure') }}</h4>
+                    <p class="text-yellow-800 text-sm">{{ _('Request deletion of your personal information') }}</p>
+                </div>
+                <div class="bg-purple-50 p-4 rounded-lg">
+                    <h4 class="font-semibold text-purple-900 mb-2">{{ _('Portability') }}</h4>
+                    <p class="text-purple-800 text-sm">{{ _('Request transfer of your data to another service') }}</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Cookies -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold text-gray-900 mb-6">{{ _('Cookies and Tracking') }}</h2>
+            <p class="text-gray-600 leading-relaxed mb-4">
+                {{ _('We use cookies and similar tracking technologies to enhance your experience on our platform. You
+                can control cookie settings through your browser preferences. However, disabling certain cookies may
+                limit functionality.') }}
+            </p>
+            <div class="bg-amber-50 border-l-4 border-amber-400 p-4">
+                <p class="text-amber-800 text-sm">
+                    <i class="fas fa-info-circle mr-2"></i>
+                    {{ _('Essential cookies are required for the platform to function properly and cannot be disabled.')
+                    }}
+                </p>
+            </div>
+        </section>
+
+        <!-- International Transfers -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold text-gray-900 mb-6">{{ _('International Data Transfers') }}</h2>
+            <p class="text-gray-600 leading-relaxed">
+                {{ _('Your information may be transferred to and processed in countries other than your own. We ensure
+                appropriate safeguards are in place to protect your information in accordance with applicable data
+                protection laws.') }}
+            </p>
+        </section>
+
+        <!-- Children's Privacy -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold text-gray-900 mb-6">{{ _('Children\'s Privacy') }}</h2>
+            <p class="text-gray-600 leading-relaxed">
+                {{ _('Our services are not intended for children under 13 years of age. We do not knowingly collect
+                personal information from children under 13. If you are a parent or guardian and believe your child has
+                provided us with personal information, please contact us immediately.') }}
+            </p>
+        </section>
+
+        <!-- Changes to Policy -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold text-gray-900 mb-6">{{ _('Changes to This Privacy Policy') }}</h2>
+            <p class="text-gray-600 leading-relaxed">
+                {{ _('We may update this Privacy Policy from time to time. We will notify you of any changes by posting
+                the new Privacy Policy on this page and updating the "Last updated" date. We encourage you to review
+                this Privacy Policy periodically for any changes.') }}
+            </p>
+        </section>
+
+        <!-- Contact Information -->
+        <section class="bg-gray-50 p-6 rounded-lg">
+            <h2 class="text-2xl font-bold text-gray-900 mb-6">{{ _('Contact Us') }}</h2>
+            <p class="text-gray-600 leading-relaxed mb-4">
+                {{ _('If you have any questions about this Privacy Policy or our data practices, please contact us:') }}
+            </p>
+            <div class="space-y-2 text-gray-600">
+                <p><strong>{{ _('Email:') }}</strong> privacy@youcloudpay.com</p>
+                <p><strong>{{ _('Address:') }}</strong> 123 Tech Street, Cloud City, CC 12345</p>
+                <p><strong>{{ _('Phone:') }}</strong> +1 (555) 123-4567</p>
+            </div>
+            <div class="mt-6">
+                <a href="{{ url_for('main.contact') }}"
+                    class="inline-flex items-center bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors duration-200">
+                    <i class="fas fa-envelope mr-2"></i>
+                    {{ _('Contact Our Privacy Team') }}
+                </a>
+            </div>
+        </section>
+    </div>
+</div>
+{% endblock %}

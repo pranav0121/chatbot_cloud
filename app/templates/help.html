@@ -1,0 +1,363 @@
+{% extends "base.html" %}
+
+{% block title %}{{ _('Help Center') }} - YouCloudPay Devshop{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <!-- Header -->
+    <div class="text-center mb-16">
+        <h1 class="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
+            {{ _('Help Center') }}
+        </h1>
+        <p class="text-xl text-gray-600 max-w-3xl mx-auto">
+            {{ _('Find answers to your questions, learn how to use our platform, and get the support you need.') }}
+        </p>
+    </div>
+
+    <!-- Search Bar -->
+    <div class="max-w-2xl mx-auto mb-16">
+        <div class="relative">
+            <input type="text" id="helpSearch" placeholder="{{ _('Search for help topics...') }}"
+                class="w-full px-6 py-4 text-lg border border-gray-300 rounded-full focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-lg">
+            <button
+                class="absolute right-3 top-1/2 transform -translate-y-1/2 bg-blue-600 text-white p-3 rounded-full hover:bg-blue-700 transition-colors duration-200">
+                <i class="fas fa-search"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
+        <a href="{{ url_for('chat.index') }}"
+            class="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-8 rounded-2xl shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-200">
+            <div class="text-center">
+                <div
+                    class="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i class="fas fa-comments text-2xl"></i>
+                </div>
+                <h3 class="text-xl font-bold mb-2">{{ _('Live Chat Support') }}</h3>
+                <p class="opacity-90">{{ _('Get instant help from our AI assistant') }}</p>
+            </div>
+        </a>
+
+        <a href="{{ url_for('main.faq') }}"
+            class="bg-gradient-to-r from-green-600 to-teal-600 text-white p-8 rounded-2xl shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-200">
+            <div class="text-center">
+                <div
+                    class="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i class="fas fa-question-circle text-2xl"></i>
+                </div>
+                <h3 class="text-xl font-bold mb-2">{{ _('FAQ') }}</h3>
+                <p class="opacity-90">{{ _('Browse frequently asked questions') }}</p>
+            </div>
+        </a>
+
+        <a href="{{ url_for('main.contact') }}"
+            class="bg-gradient-to-r from-orange-600 to-red-600 text-white p-8 rounded-2xl shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-200">
+            <div class="text-center">
+                <div
+                    class="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i class="fas fa-envelope text-2xl"></i>
+                </div>
+                <h3 class="text-xl font-bold mb-2">{{ _('Contact Support') }}</h3>
+                <p class="opacity-90">{{ _('Send us a message directly') }}</p>
+            </div>
+        </a>
+    </div>
+
+    <!-- Help Categories -->
+    <div class="mb-16">
+        <h2 class="text-3xl font-bold text-gray-900 text-center mb-12">{{ _('Browse by Category') }}</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <!-- Getting Started -->
+            <div class="bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl transition-shadow duration-200">
+                <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-6">
+                    <i class="fas fa-rocket text-blue-600 text-xl"></i>
+                </div>
+                <h3 class="text-xl font-bold text-gray-900 mb-4">{{ _('Getting Started') }}</h3>
+                <ul class="space-y-3">
+                    <li><a href="#" class="text-gray-600 hover:text-blue-600 flex items-center">
+                            <i class="fas fa-chevron-right text-xs mr-2"></i>
+                            {{ _('Creating your account') }}
+                        </a></li>
+                    <li><a href="#" class="text-gray-600 hover:text-blue-600 flex items-center">
+                            <i class="fas fa-chevron-right text-xs mr-2"></i>
+                            {{ _('Setting up your profile') }}
+                        </a></li>
+                    <li><a href="#" class="text-gray-600 hover:text-blue-600 flex items-center">
+                            <i class="fas fa-chevron-right text-xs mr-2"></i>
+                            {{ _('First steps guide') }}
+                        </a></li>
+                    <li><a href="#" class="text-gray-600 hover:text-blue-600 flex items-center">
+                            <i class="fas fa-chevron-right text-xs mr-2"></i>
+                            {{ _('Platform overview') }}
+                        </a></li>
+                </ul>
+            </div>
+
+            <!-- Account Management -->
+            <div class="bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl transition-shadow duration-200">
+                <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-6">
+                    <i class="fas fa-user-cog text-green-600 text-xl"></i>
+                </div>
+                <h3 class="text-xl font-bold text-gray-900 mb-4">{{ _('Account Management') }}</h3>
+                <ul class="space-y-3">
+                    <li><a href="#" class="text-gray-600 hover:text-blue-600 flex items-center">
+                            <i class="fas fa-chevron-right text-xs mr-2"></i>
+                            {{ _('Updating profile information') }}
+                        </a></li>
+                    <li><a href="#" class="text-gray-600 hover:text-blue-600 flex items-center">
+                            <i class="fas fa-chevron-right text-xs mr-2"></i>
+                            {{ _('Changing password') }}
+                        </a></li>
+                    <li><a href="#" class="text-gray-600 hover:text-blue-600 flex items-center">
+                            <i class="fas fa-chevron-right text-xs mr-2"></i>
+                            {{ _('Privacy settings') }}
+                        </a></li>
+                    <li><a href="#" class="text-gray-600 hover:text-blue-600 flex items-center">
+                            <i class="fas fa-chevron-right text-xs mr-2"></i>
+                            {{ _('Deleting account') }}
+                        </a></li>
+                </ul>
+            </div>
+
+            <!-- Support Tickets -->
+            <div class="bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl transition-shadow duration-200">
+                <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-6">
+                    <i class="fas fa-ticket-alt text-purple-600 text-xl"></i>
+                </div>
+                <h3 class="text-xl font-bold text-gray-900 mb-4">{{ _('Support Tickets') }}</h3>
+                <ul class="space-y-3">
+                    <li><a href="#" class="text-gray-600 hover:text-blue-600 flex items-center">
+                            <i class="fas fa-chevron-right text-xs mr-2"></i>
+                            {{ _('Creating a complaint') }}
+                        </a></li>
+                    <li><a href="#" class="text-gray-600 hover:text-blue-600 flex items-center">
+                            <i class="fas fa-chevron-right text-xs mr-2"></i>
+                            {{ _('Tracking ticket status') }}
+                        </a></li>
+                    <li><a href="#" class="text-gray-600 hover:text-blue-600 flex items-center">
+                            <i class="fas fa-chevron-right text-xs mr-2"></i>
+                            {{ _('Uploading attachments') }}
+                        </a></li>
+                    <li><a href="#" class="text-gray-600 hover:text-blue-600 flex items-center">
+                            <i class="fas fa-chevron-right text-xs mr-2"></i>
+                            {{ _('Response times') }}
+                        </a></li>
+                </ul>
+            </div>
+
+            <!-- Chat & Messaging -->
+            <div class="bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl transition-shadow duration-200">
+                <div class="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center mb-6">
+                    <i class="fas fa-comments text-yellow-600 text-xl"></i>
+                </div>
+                <h3 class="text-xl font-bold text-gray-900 mb-4">{{ _('Chat & Messaging') }}</h3>
+                <ul class="space-y-3">
+                    <li><a href="#" class="text-gray-600 hover:text-blue-600 flex items-center">
+                            <i class="fas fa-chevron-right text-xs mr-2"></i>
+                            {{ _('Using the chat interface') }}
+                        </a></li>
+                    <li><a href="#" class="text-gray-600 hover:text-blue-600 flex items-center">
+                            <i class="fas fa-chevron-right text-xs mr-2"></i>
+                            {{ _('Language translation') }}
+                        </a></li>
+                    <li><a href="#" class="text-gray-600 hover:text-blue-600 flex items-center">
+                            <i class="fas fa-chevron-right text-xs mr-2"></i>
+                            {{ _('File sharing') }}
+                        </a></li>
+                    <li><a href="#" class="text-gray-600 hover:text-blue-600 flex items-center">
+                            <i class="fas fa-chevron-right text-xs mr-2"></i>
+                            {{ _('Chat history') }}
+                        </a></li>
+                </ul>
+            </div>
+
+            <!-- Technical Issues -->
+            <div class="bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl transition-shadow duration-200">
+                <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center mb-6">
+                    <i class="fas fa-tools text-red-600 text-xl"></i>
+                </div>
+                <h3 class="text-xl font-bold text-gray-900 mb-4">{{ _('Technical Issues') }}</h3>
+                <ul class="space-y-3">
+                    <li><a href="#" class="text-gray-600 hover:text-blue-600 flex items-center">
+                            <i class="fas fa-chevron-right text-xs mr-2"></i>
+                            {{ _('Login problems') }}
+                        </a></li>
+                    <li><a href="#" class="text-gray-600 hover:text-blue-600 flex items-center">
+                            <i class="fas fa-chevron-right text-xs mr-2"></i>
+                            {{ _('Browser compatibility') }}
+                        </a></li>
+                    <li><a href="#" class="text-gray-600 hover:text-blue-600 flex items-center">
+                            <i class="fas fa-chevron-right text-xs mr-2"></i>
+                            {{ _('File upload issues') }}
+                        </a></li>
+                    <li><a href="#" class="text-gray-600 hover:text-blue-600 flex items-center">
+                            <i class="fas fa-chevron-right text-xs mr-2"></i>
+                            {{ _('Performance problems') }}
+                        </a></li>
+                </ul>
+            </div>
+
+            <!-- Billing & Payments -->
+            <div class="bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl transition-shadow duration-200">
+                <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center mb-6">
+                    <i class="fas fa-credit-card text-indigo-600 text-xl"></i>
+                </div>
+                <h3 class="text-xl font-bold text-gray-900 mb-4">{{ _('Billing & Payments') }}</h3>
+                <ul class="space-y-3">
+                    <li><a href="#" class="text-gray-600 hover:text-blue-600 flex items-center">
+                            <i class="fas fa-chevron-right text-xs mr-2"></i>
+                            {{ _('Payment methods') }}
+                        </a></li>
+                    <li><a href="#" class="text-gray-600 hover:text-blue-600 flex items-center">
+                            <i class="fas fa-chevron-right text-xs mr-2"></i>
+                            {{ _('Billing cycles') }}
+                        </a></li>
+                    <li><a href="#" class="text-gray-600 hover:text-blue-600 flex items-center">
+                            <i class="fas fa-chevron-right text-xs mr-2"></i>
+                            {{ _('Refund policy') }}
+                        </a></li>
+                    <li><a href="#" class="text-gray-600 hover:text-blue-600 flex items-center">
+                            <i class="fas fa-chevron-right text-xs mr-2"></i>
+                            {{ _('Invoice inquiries') }}
+                        </a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Popular Articles -->
+    <div class="mb-16">
+        <h2 class="text-3xl font-bold text-gray-900 text-center mb-12">{{ _('Popular Articles') }}</h2>
+
+        <div class="bg-white rounded-2xl shadow-xl p-8">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div class="space-y-4">
+                    <h3 class="text-xl font-semibold text-gray-900 mb-4">{{ _('Most Viewed') }}</h3>
+                    <div class="space-y-3">
+                        <a href="#"
+                            class="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg transition-colors duration-200">
+                            <span class="text-gray-700">{{ _('How to reset your password') }}</span>
+                            <span class="text-sm text-gray-500">1,234 views</span>
+                        </a>
+                        <a href="#"
+                            class="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg transition-colors duration-200">
+                            <span class="text-gray-700">{{ _('Creating your first support ticket') }}</span>
+                            <span class="text-sm text-gray-500">987 views</span>
+                        </a>
+                        <a href="#"
+                            class="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg transition-colors duration-200">
+                            <span class="text-gray-700">{{ _('Understanding response times') }}</span>
+                            <span class="text-sm text-gray-500">756 views</span>
+                        </a>
+                        <a href="#"
+                            class="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg transition-colors duration-200">
+                            <span class="text-gray-700">{{ _('Using the chat feature') }}</span>
+                            <span class="text-sm text-gray-500">623 views</span>
+                        </a>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <h3 class="text-xl font-semibold text-gray-900 mb-4">{{ _('Recently Updated') }}</h3>
+                    <div class="space-y-3">
+                        <a href="#"
+                            class="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg transition-colors duration-200">
+                            <span class="text-gray-700">{{ _('New chat features guide') }}</span>
+                            <span class="text-sm text-green-600">Updated 2 days ago</span>
+                        </a>
+                        <a href="#"
+                            class="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg transition-colors duration-200">
+                            <span class="text-gray-700">{{ _('Privacy policy changes') }}</span>
+                            <span class="text-sm text-green-600">Updated 1 week ago</span>
+                        </a>
+                        <a href="#"
+                            class="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg transition-colors duration-200">
+                            <span class="text-gray-700">{{ _('File upload improvements') }}</span>
+                            <span class="text-sm text-green-600">Updated 2 weeks ago</span>
+                        </a>
+                        <a href="#"
+                            class="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg transition-colors duration-200">
+                            <span class="text-gray-700">{{ _('Browser compatibility update') }}</span>
+                            <span class="text-sm text-green-600">Updated 3 weeks ago</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Video Tutorials -->
+    <div class="mb-16">
+        <h2 class="text-3xl font-bold text-gray-900 text-center mb-12">{{ _('Video Tutorials') }}</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div class="bg-white rounded-2xl shadow-xl overflow-hidden hover:shadow-2xl transition-shadow duration-200">
+                <div class="bg-gradient-to-r from-blue-500 to-purple-600 h-40 flex items-center justify-center">
+                    <i class="fas fa-play-circle text-white text-5xl"></i>
+                </div>
+                <div class="p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2">{{ _('Platform Overview') }}</h3>
+                    <p class="text-gray-600 text-sm mb-4">{{ _('Get a complete overview of all platform features and
+                        capabilities.') }}</p>
+                    <span class="text-xs text-gray-500">{{ _('5 minutes') }}</span>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl shadow-xl overflow-hidden hover:shadow-2xl transition-shadow duration-200">
+                <div class="bg-gradient-to-r from-green-500 to-teal-600 h-40 flex items-center justify-center">
+                    <i class="fas fa-play-circle text-white text-5xl"></i>
+                </div>
+                <div class="p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2">{{ _('Chat Tutorial') }}</h3>
+                    <p class="text-gray-600 text-sm mb-4">{{ _('Learn how to effectively use our AI-powered chat
+                        system.') }}</p>
+                    <span class="text-xs text-gray-500">{{ _('3 minutes') }}</span>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl shadow-xl overflow-hidden hover:shadow-2xl transition-shadow duration-200">
+                <div class="bg-gradient-to-r from-orange-500 to-red-600 h-40 flex items-center justify-center">
+                    <i class="fas fa-play-circle text-white text-5xl"></i>
+                </div>
+                <div class="p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2">{{ _('Support Tickets') }}</h3>
+                    <p class="text-gray-600 text-sm mb-4">{{ _('Master the process of creating and managing support
+                        tickets.') }}</p>
+                    <span class="text-xs text-gray-500">{{ _('4 minutes') }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contact Support -->
+    <div class="bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl shadow-xl text-white text-center p-12">
+        <h2 class="text-3xl font-bold mb-6">{{ _('Still Need Help?') }}</h2>
+        <p class="text-xl opacity-90 mb-8">{{ _('Our support team is here to assist you 24/7') }}</p>
+
+        <div class="flex flex-wrap justify-center gap-4">
+            <a href="{{ url_for('chat.index') }}"
+                class="bg-white text-blue-600 font-semibold py-3 px-8 rounded-lg hover:bg-gray-100 transition-colors duration-200">
+                <i class="fas fa-comments mr-2"></i>
+                {{ _('Start Live Chat') }}
+            </a>
+            <a href="{{ url_for('main.contact') }}"
+                class="bg-transparent border-2 border-white text-white font-semibold py-3 px-8 rounded-lg hover:bg-white hover:text-blue-600 transition-colors duration-200">
+                <i class="fas fa-envelope mr-2"></i>
+                {{ _('Send Message') }}
+            </a>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Simple search functionality
+    document.getElementById('helpSearch').addEventListener('input', function (e) {
+        const searchTerm = e.target.value.toLowerCase();
+        // This would typically connect to a search API
+        console.log('Searching for:', searchTerm);
+    });
+</script>
+{% endblock %}

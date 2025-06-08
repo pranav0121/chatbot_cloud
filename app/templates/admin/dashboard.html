@@ -1,0 +1,398 @@
+{% extends "base.html" %}
+
+{% block title %}{{ _('Admin Dashboard') }} - YouCloudPay Devshop Support{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white shadow">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="py-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h1 class="text-2xl font-bold text-gray-900">{{ _('Admin Dashboard') }}</h1>
+                        <p class="mt-1 text-sm text-gray-600">{{ _('Manage support system and monitor performance') }}
+                        </p>
+                    </div>
+                    <div class="flex space-x-3">
+                        <a href="{{ url_for('admin.users') }}"
+                            class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                            <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-8.503a1 1 0 01-2 0 1 1 0 012 0zM13 7a4 4 0 11-8 0 4 4 0 018 0z">
+                                </path>
+                            </svg>
+                            {{ _('Manage Users') }}
+                        </a>
+                        <a href="{{ url_for('admin.faqs') }}"
+                            class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700">
+                            <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z">
+                                </path>
+                            </svg>
+                            {{ _('Manage FAQ') }}
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Stats Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <!-- Total Users -->
+            <div class="bg-white overflow-hidden shadow rounded-lg">
+                <div class="p-5">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <div class="h-10 w-10 bg-blue-100 rounded-md flex items-center justify-center">
+                                <svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-8.503a1 1 0 01-2 0 1 1 0 012 0zM13 7a4 4 0 11-8 0 4 4 0 018 0z">
+                                    </path>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="ml-5 w-0 flex-1">
+                            <dl>
+                                <dt class="text-sm font-medium text-gray-500 truncate">{{ _('Total Users') }}</dt>
+                                <dd class="text-lg font-medium text-gray-900">{{ stats.total_users }}</dd>
+                            </dl>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <span class="text-sm text-green-600">+{{ stats.new_users_today }} {{ _('today') }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Total Complaints -->
+            <div class="bg-white overflow-hidden shadow rounded-lg">
+                <div class="p-5">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <div class="h-10 w-10 bg-yellow-100 rounded-md flex items-center justify-center">
+                                <svg class="h-6 w-6 text-yellow-600" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                                    </path>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="ml-5 w-0 flex-1">
+                            <dl>
+                                <dt class="text-sm font-medium text-gray-500 truncate">{{ _('Total Complaints') }}</dt>
+                                <dd class="text-lg font-medium text-gray-900">{{ stats.total_complaints }}</dd>
+                            </dl>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <span class="text-sm text-blue-600">{{ stats.open_complaints }} {{ _('open') }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Resolution Rate -->
+            <div class="bg-white overflow-hidden shadow rounded-lg">
+                <div class="p-5">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <div class="h-10 w-10 bg-green-100 rounded-md flex items-center justify-center">
+                                <svg class="h-6 w-6 text-green-600" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="ml-5 w-0 flex-1">
+                            <dl>
+                                <dt class="text-sm font-medium text-gray-500 truncate">{{ _('Resolution Rate') }}</dt>
+                                <dd class="text-lg font-medium text-gray-900">{{ stats.resolution_rate }}%</dd>
+                            </dl>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <span class="text-sm text-green-600">+2% {{ _('this week') }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Average Response Time -->
+            <div class="bg-white overflow-hidden shadow rounded-lg">
+                <div class="p-5">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <div class="h-10 w-10 bg-purple-100 rounded-md flex items-center justify-center">
+                                <svg class="h-6 w-6 text-purple-600" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="ml-5 w-0 flex-1">
+                            <dl>
+                                <dt class="text-sm font-medium text-gray-500 truncate">{{ _('Avg Response Time') }}</dt>
+                                <dd class="text-lg font-medium text-gray-900">{{ stats.avg_response_time }}h</dd>
+                            </dl>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <span class="text-sm text-green-600">-15min {{ _('improved') }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- Recent Complaints -->
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-lg font-medium text-gray-900">{{ _('Recent Complaints') }}</h2>
+                        <a href="{{ url_for('admin.complaints') }}" class="text-sm text-blue-600 hover:text-blue-500">
+                            {{ _('View all') }}
+                        </a>
+                    </div>
+                </div>
+
+                <div class="divide-y divide-gray-200">
+                    {% for complaint in recent_complaints %}
+                    <div class="px-6 py-4">
+                        <div class="flex items-center justify-between">
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-medium text-gray-900 truncate">
+                                    {{ complaint.subject }}
+                                </p>
+                                <p class="text-sm text-gray-500">
+                                    {{ complaint.user.name }} • {{ complaint.created_at.strftime('%m/%d %H:%M') }}
+                                </p>
+                            </div>
+                            <div class="ml-4 flex-shrink-0">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
+                                        {% if complaint.status == 'open' %}bg-yellow-100 text-yellow-800
+                                        {% elif complaint.status == 'in_progress' %}bg-blue-100 text-blue-800
+                                        {% elif complaint.status == 'resolved' %}bg-green-100 text-green-800
+                                        {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                    {{ complaint.status.replace('_', ' ').title() }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- System Status -->
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h2 class="text-lg font-medium text-gray-900">{{ _('System Status') }}</h2>
+                </div>
+
+                <div class="p-6 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-gray-600">{{ _('Database') }}</span>
+                        <span
+                            class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <div class="h-1.5 w-1.5 bg-green-400 rounded-full mr-1.5"></div>
+                            {{ _('Operational') }}
+                        </span>
+                    </div>
+
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-gray-600">{{ _('Chat Service') }}</span>
+                        <span
+                            class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <div class="h-1.5 w-1.5 bg-green-400 rounded-full mr-1.5"></div>
+                            {{ _('Online') }}
+                        </span>
+                    </div>
+
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-gray-600">{{ _('Translation API') }}</span>
+                        <span
+                            class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <div class="h-1.5 w-1.5 bg-green-400 rounded-full mr-1.5"></div>
+                            {{ _('Available') }}
+                        </span>
+                    </div>
+
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-gray-600">{{ _('File Upload') }}</span>
+                        <span
+                            class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <div class="h-1.5 w-1.5 bg-green-400 rounded-full mr-1.5"></div>
+                            {{ _('Working') }}
+                        </span>
+                    </div>
+
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-gray-600">{{ _('Email Service') }}</span>
+                        <span
+                            class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                            <div class="h-1.5 w-1.5 bg-yellow-400 rounded-full mr-1.5"></div>
+                            {{ _('Degraded') }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+            <!-- Complaints Trend -->
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h2 class="text-lg font-medium text-gray-900">{{ _('Complaints Trend (Last 7 Days)') }}</h2>
+                </div>
+                <div class="p-6">
+                    <canvas id="complaintsChart" width="400" height="200"></canvas>
+                </div>
+            </div>
+
+            <!-- Resolution Time Distribution -->
+            <div class="bg-white shadow rounded-lg">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h2 class="text-lg font-medium text-gray-900">{{ _('Response Time Distribution') }}</h2>
+                </div>
+                <div class="p-6">
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-gray-600">{{ _('< 1 hour') }}</span>
+                                    <div class="flex items-center space-x-2">
+                                        <div class="w-32 bg-gray-200 rounded-full h-2">
+                                            <div class="bg-green-600 h-2 rounded-full" style="width: 75%"></div>
+                                        </div>
+                                        <span class="text-sm font-medium text-gray-900">75%</span>
+                                    </div>
+                        </div>
+
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-gray-600">{{ _('1-4 hours') }}</span>
+                            <div class="flex items-center space-x-2">
+                                <div class="w-32 bg-gray-200 rounded-full h-2">
+                                    <div class="bg-yellow-500 h-2 rounded-full" style="width: 20%"></div>
+                                </div>
+                                <span class="text-sm font-medium text-gray-900">20%</span>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-gray-600">{{ _('4-24 hours') }}</span>
+                            <div class="flex items-center space-x-2">
+                                <div class="w-32 bg-gray-200 rounded-full h-2">
+                                    <div class="bg-orange-500 h-2 rounded-full" style="width: 4%"></div>
+                                </div>
+                                <span class="text-sm font-medium text-gray-900">4%</span>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-gray-600">{{ _('> 24 hours') }}</span>
+                            <div class="flex items-center space-x-2">
+                                <div class="w-32 bg-gray-200 rounded-full h-2">
+                                    <div class="bg-red-500 h-2 rounded-full" style="width: 1%"></div>
+                                </div>
+                                <span class="text-sm font-medium text-gray-900">1%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="bg-white shadow rounded-lg mt-8">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h2 class="text-lg font-medium text-gray-900">{{ _('Quick Actions') }}</h2>
+            </div>
+            <div class="p-6">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <a href="{{ url_for('admin.complaints') }}"
+                        class="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
+                        <div class="flex-shrink-0">
+                            <svg class="h-8 w-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                                </path>
+                            </svg>
+                        </div>
+                        <div class="ml-4">
+                            <h3 class="text-sm font-medium text-gray-900">{{ _('Manage Complaints') }}</h3>
+                            <p class="text-sm text-gray-500">{{ _('View and respond to support requests') }}</p>
+                        </div>
+                    </a>
+
+                    <a href="{{ url_for('admin.users') }}"
+                        class="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
+                        <div class="flex-shrink-0">
+                            <svg class="h-8 w-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-8.503a1 1 0 01-2 0 1 1 0 012 0zM13 7a4 4 0 11-8 0 4 4 0 018 0z">
+                                </path>
+                            </svg>
+                        </div>
+                        <div class="ml-4">
+                            <h3 class="text-sm font-medium text-gray-900">{{ _('User Management') }}</h3>
+                            <p class="text-sm text-gray-500">{{ _('Manage user accounts and permissions') }}</p>
+                        </div>
+                    </a>
+
+                    <a href="{{ url_for('admin.analytics') }}"
+                        class="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
+                        <div class="flex-shrink-0">
+                            <svg class="h-8 w-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z">
+                                </path>
+                            </svg>
+                        </div>
+                        <div class="ml-4">
+                            <h3 class="text-sm font-medium text-gray-900">{{ _('Analytics') }}</h3>
+                            <p class="text-sm text-gray-500">{{ _('View detailed reports and insights') }}</p>
+                        </div>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Complaints Trend Chart
+    const ctx = document.getElementById('complaintsChart').getContext('2d');
+    const complaintsChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: {{ chart_data.labels | tojson }},
+    datasets: [{
+        label: '{{ _("Complaints") }}',
+        data: {{ chart_data.complaints | tojson }},
+        borderColor: 'rgb(59, 130, 246)',
+        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        tension: 0.1
+        }, {
+        label: '{{ _("Resolved") }}',
+        data: {{ chart_data.resolved | tojson }},
+        borderColor: 'rgb(34, 197, 94)',
+        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        tension: 0.1
+        }]
+    },
+    options: {
+        responsive: true,
+            scales: {
+            y: {
+                beginAtZero: true
+            }
+        }
+    }
+});
+</script>
+{% endblock %}

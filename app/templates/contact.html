@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+
+{% block title %}{{ _('Contact Us') }} - YouCloudPay Devshop{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <!-- Header Section -->
+    <div class="text-center mb-16">
+        <h1 class="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
+            {{ _('Get in Touch') }}
+        </h1>
+        <p class="text-xl text-gray-600 max-w-3xl mx-auto">
+            {{ _('We\'re here to help! Reach out to us through any of the channels below and we\'ll get back to you as
+            soon as possible.') }}
+        </p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-16">
+        <!-- Contact Form -->
+        <div class="bg-white rounded-2xl shadow-xl p-8">
+            <h2 class="text-3xl font-bold text-gray-900 mb-8">{{ _('Send us a Message') }}</h2>
+
+            <form id="contactForm" class="space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="firstName" class="block text-sm font-medium text-gray-700 mb-2">
+                            {{ _('First Name') }} <span class="text-red-500">*</span>
+                        </label>
+                        <input type="text" id="firstName" name="firstName" required
+                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200">
+                    </div>
+                    <div>
+                        <label for="lastName" class="block text-sm font-medium text-gray-700 mb-2">
+                            {{ _('Last Name') }} <span class="text-red-500">*</span>
+                        </label>
+                        <input type="text" id="lastName" name="lastName" required
+                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200">
+                    </div>
+                </div>
+
+                <div>
+                    <label for="email" class="block text-sm font-medium text-gray-700 mb-2">
+                        {{ _('Email Address') }} <span class="text-red-500">*</span>
+                    </label>
+                    <input type="email" id="email" name="email" required
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200">
+                </div>
+
+                <div>
+                    <label for="phone" class="block text-sm font-medium text-gray-700 mb-2">
+                        {{ _('Phone Number') }}
+                    </label>
+                    <input type="tel" id="phone" name="phone"
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200">
+                </div>
+
+                <div>
+                    <label for="subject" class="block text-sm font-medium text-gray-700 mb-2">
+                        {{ _('Subject') }} <span class="text-red-500">*</span>
+                    </label>
+                    <select id="subject" name="subject" required
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200">
+                        <option value="">{{ _('Select a subject') }}</option>
+                        <option value="general">{{ _('General Inquiry') }}</option>
+                        <option value="support">{{ _('Technical Support') }}</option>
+                        <option value="billing">{{ _('Billing & Payments') }}</option>
+                        <option value="partnership">{{ _('Partnership Opportunities') }}</option>
+                        <option value="feedback">{{ _('Feedback & Suggestions') }}</option>
+                        <option value="other">{{ _('Other') }}</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label for="message" class="block text-sm font-medium text-gray-700 mb-2">
+                        {{ _('Message') }} <span class="text-red-500">*</span>
+                    </label>
+                    <textarea id="message" name="message" rows="6" required
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 resize-none"
+                        placeholder="{{ _('Please describe your inquiry in detail...') }}"></textarea>
+                </div>
+
+                <div class="flex items-center">
+                    <input type="checkbox" id="consent" name="consent" required
+                        class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                    <label for="consent" class="ml-2 text-sm text-gray-600">
+                        {{ _('I agree to the') }}
+                        <a href="{{ url_for('main.privacy') }}" class="text-blue-600 hover:text-blue-800 underline">{{
+                            _('Privacy Policy') }}</a>
+                        {{ _('and') }}
+                        <a href="{{ url_for('main.terms') }}" class="text-blue-600 hover:text-blue-800 underline">{{
+                            _('Terms of Service') }}</a>
+                    </label>
+                </div>
+
+                <button type="submit"
+                    class="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold py-4 px-6 rounded-lg hover:from-blue-700 hover:to-purple-700 transform hover:scale-105 transition-all duration-200 shadow-lg">
+                    <i class="fas fa-paper-plane mr-2"></i>
+                    {{ _('Send Message') }}
+                </button>
+            </form>
+        </div>
+
+        <!-- Contact Information -->
+        <div class="space-y-8">
+            <!-- Office Locations -->
+            <div class="bg-white rounded-2xl shadow-xl p-8">
+                <h3 class="text-2xl font-bold text-gray-900 mb-6">{{ _('Our Offices') }}</h3>
+
+                <div class="space-y-6">
+                    <div class="flex items-start space-x-4">
+                        <div class="flex-shrink-0">
+                            <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-map-marker-alt text-blue-600 text-xl"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="text-lg font-semibold text-gray-900 mb-2">{{ _('Headquarters') }}</h4>
+                            <p class="text-gray-600">
+                                123 Tech Street<br>
+                                Cloud City, CC 12345<br>
+                                United States
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-start space-x-4">
+                        <div class="flex-shrink-0">
+                            <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-map-marker-alt text-green-600 text-xl"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="text-lg font-semibold text-gray-900 mb-2">{{ _('European Office') }}</h4>
+                            <p class="text-gray-600">
+                                456 Innovation Ave<br>
+                                London, UK EC1A 1BB<br>
+                                United Kingdom
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Contact Methods -->
+            <div class="bg-white rounded-2xl shadow-xl p-8">
+                <h3 class="text-2xl font-bold text-gray-900 mb-6">{{ _('Contact Information') }}</h3>
+
+                <div class="space-y-4">
+                    <div class="flex items-center space-x-4">
+                        <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-phone text-blue-600"></i>
+                        </div>
+                        <div>
+                            <p class="font-medium text-gray-900">{{ _('Phone') }}</p>
+                            <p class="text-gray-600">+1 (555) 123-4567</p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center space-x-4">
+                        <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-envelope text-green-600"></i>
+                        </div>
+                        <div>
+                            <p class="font-medium text-gray-900">{{ _('Email') }}</p>
+                            <p class="text-gray-600">contact@youcloudpay.com</p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center space-x-4">
+                        <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-headset text-purple-600"></i>
+                        </div>
+                        <div>
+                            <p class="font-medium text-gray-900">{{ _('Support') }}</p>
+                            <p class="text-gray-600">support@youcloudpay.com</p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center space-x-4">
+                        <div class="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-clock text-yellow-600"></i>
+                        </div>
+                        <div>
+                            <p class="font-medium text-gray-900">{{ _('Business Hours') }}</p>
+                            <p class="text-gray-600">{{ _('Mon-Fri: 9AM-6PM EST') }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Social Media -->
+            <div class="bg-white rounded-2xl shadow-xl p-8">
+                <h3 class="text-2xl font-bold text-gray-900 mb-6">{{ _('Follow Us') }}</h3>
+
+                <div class="flex space-x-4">
+                    <a href="#"
+                        class="w-12 h-12 bg-blue-600 text-white rounded-lg flex items-center justify-center hover:bg-blue-700 transition-colors duration-200">
+                        <i class="fab fa-twitter"></i>
+                    </a>
+                    <a href="#"
+                        class="w-12 h-12 bg-blue-800 text-white rounded-lg flex items-center justify-center hover:bg-blue-900 transition-colors duration-200">
+                        <i class="fab fa-linkedin"></i>
+                    </a>
+                    <a href="#"
+                        class="w-12 h-12 bg-gray-800 text-white rounded-lg flex items-center justify-center hover:bg-gray-900 transition-colors duration-200">
+                        <i class="fab fa-github"></i>
+                    </a>
+                    <a href="#"
+                        class="w-12 h-12 bg-red-600 text-white rounded-lg flex items-center justify-center hover:bg-red-700 transition-colors duration-200">
+                        <i class="fab fa-youtube"></i>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Quick Links -->
+            <div class="bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl shadow-xl p-8 text-white">
+                <h3 class="text-2xl font-bold mb-6">{{ _('Need Immediate Help?') }}</h3>
+                <p class="mb-6 opacity-90">{{ _('Try our 24/7 AI-powered chat support for instant assistance.') }}</p>
+                <a href="{{ url_for('chat.index') }}"
+                    class="inline-flex items-center bg-white text-blue-600 font-semibold py-3 px-6 rounded-lg hover:bg-gray-100 transition-colors duration-200">
+                    <i class="fas fa-comments mr-2"></i>
+                    {{ _('Start Chat Now') }}
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Success Modal -->
+<div id="successModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden z-50 flex items-center justify-center">
+    <div class="bg-white rounded-lg p-8 max-w-md mx-4">
+        <div class="text-center">
+            <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-check text-green-600 text-2xl"></i>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900 mb-2">{{ _('Message Sent!') }}</h3>
+            <p class="text-gray-600 mb-6">{{ _('Thank you for contacting us. We\'ll get back to you within 24 hours.')
+                }}</p>
+            <button onclick="closeModal()"
+                class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200">
+                {{ _('Close') }}
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('contactForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+
+        // Simulate form submission
+        setTimeout(() => {
+            document.getElementById('successModal').classList.remove('hidden');
+            this.reset();
+        }, 1000);
+    });
+
+    function closeModal() {
+        document.getElementById('successModal').classList.add('hidden');
+    }
+</script>
+{% endblock %}

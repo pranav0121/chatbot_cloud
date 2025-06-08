@@ -1,0 +1,226 @@
+from app.models.faq import FAQ
+from app.models.message import Message
+from app.models.complaint import Complaint
+from app.services.translation_service import TranslationService
+from flask import current_app
+import re
+import logging
+
+logger = logging.getLogger(__name__)
+
+class ChatbotService:
+    """Service for chatbot logic and responses"""
+    
+    # Bot response templates
+    GREETINGS = [
+        "Hello! I'm your YouCloudPay support assistant. How can I help you today?",
+        "Hi there! Welcome to YouCloudPay support. What can I assist you with?",
+        "Greetings! I'm here to help with your YouCloudPay questions and concerns."
+    ]
+    
+    COMPLAINT_CATEGORIES = {
+        'payment': 'Payment Issues',
+        'order': 'Order Problems',
+        'account': 'Account Issues',
+        'technical': 'Technical Problems',
+        'billing': 'Billing Questions',
+        'refund': 'Refund Requests',
+        'other': 'Other Issues'
+    }
+    
+    @staticmethod
+    def generate_bot_response(user_message, user, complaint=None, conversation_context=None):
+        """Generate appropriate bot response based on user message and context"""
+        message_lower = user_message.lower().strip()
+        
+        # Check for greetings
+        if ChatbotService._is_greeting(message_lower):
+            return ChatbotService._get_greeting_response(user)
+        
+        # Check for FAQ keywords
+        faq_response = ChatbotService._search_faq_response(message_lower, user.language)
+        if faq_response:
+            return faq_response
+        
+        # Check if user wants to file a complaint
+        if ChatbotService._is_complaint_intent(message_lower):
+            return ChatbotService._initiate_complaint_flow(user)
+        
+        # If we're in complaint flow, handle accordingly
+        if complaint and complaint.status == 'open':
+            return ChatbotService._handle_complaint_flow(user_message, complaint, user)
+        
+        # Default response with helpful options
+        return ChatbotService._get_default_response(user)
+    
+    @staticmethod
+    def _is_greeting(message):
+        """Check if message is a greeting"""
+        greetings = ['hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening']
+        return any(greeting in message for greeting in greetings)
+    
+    @staticmethod
+    def _is_complaint_intent(message):
+        """Check if user wants to file a complaint"""
+        complaint_keywords = [
+            'complaint', 'complain', 'issue', 'problem', 'trouble', 'help',
+            'support', 'wrong', 'error', 'bug', 'not working', 'broken'
+        ]
+        return any(keyword in message for keyword in complaint_keywords)
+    
+    @staticmethod
+    def _get_greeting_response(user):
+        """Get personalized greeting response"""
+        name = user.get_full_name()
+        return f"Hello {name}! Welcome to YouCloudPay support. I can help you with:\n\n" \
+               "• File a complaint or report an issue\n" \
+               "• Answer frequently asked questions\n" \
+               "• Connect you with our support team\n\n" \
+               "What would you like to do today?"
+    
+    @staticmethod
+    def _search_faq_response(message, language):
+        """Search for relevant FAQ and return response"""
+        try:
+            # Search FAQs for keywords
+            faqs = FAQ.search(message, language)
+            
+            if faqs:
+                # Return the most relevant FAQ
+                faq = faqs[0]
+                faq.increment_view()  # Track view count
+                
+                response = f"I found this helpful information:\n\n"
+                response += f"**{faq.question}**\n\n"
+                response += f"{faq.answer}\n\n"
+                response += "Was this helpful? If you need more assistance, please let me know!"
+                
+                return response
+                
+        except Exception as e:
+            logger.error(f"FAQ search failed: {e}")
+        
+        return None
+      @staticmethod
+    def _initiate_complaint_flow(user):
+        """Start the complaint filing process"""
+        # Format categories as a bulleted list for better UI presentation
+        categories_text = "\n".join([f"• **{key}**: {value}" for key, value in ChatbotService.COMPLAINT_CATEGORIES.items()])
+        
+        response = "I'd be happy to help you file a complaint. To get started, please select a category:\n\n"
+        response += categories_text
+        response += "\n\nPlease type the category name (e.g., 'payment' or 'technical')"
+        
+        return response
+    
+    @staticmethod
+    def _handle_complaint_flow(message, complaint, user):
+        """Handle ongoing complaint conversation"""
+        message_lower = message.lower().strip()
+        
+        # Check if user is providing category
+        if not complaint.category:
+            category = ChatbotService._extract_category(message_lower)
+            if category:
+                complaint.category = category
+                from app import db
+                db.session.commit()
+                  return f"Thank you! I've set your complaint category to '{ChatbotService.COMPLAINT_CATEGORIES[category]}'.\n\n" \
+                       "Now, please provide a detailed description of your issue. You can also attach any relevant files or screenshots."
+            else:
+                # Re-display the categories when user enters an invalid category
+                categories_text = "\n".join([f"• **{key}**: {value}" for key, value in ChatbotService.COMPLAINT_CATEGORIES.items()])
+                return "Please select a valid category from this list:\n\n" + categories_text + "\n\nPlease type the category name (e.g., 'payment' or 'technical')"
+        
+        # If category is set but no detailed description yet
+        if complaint.category and len(complaint.description) < 50:
+            complaint.description = message
+            from app import db
+            db.session.commit()
+            
+            response = "Thank you for the details! Your complaint has been registered with ID: " \
+                      f"**{complaint.complaint_number}**\n\n"
+            response += "Our support team will review your case and respond within 24 hours. "
+            response += "You can track the status in your dashboard.\n\n"
+            response += "Is there anything else I can help you with?"
+            
+            return response
+        
+        # General response for ongoing conversation
+        return "I've recorded your message. Our support team will review it and respond accordingly. " \
+               "Is there anything else I can help you with today?"
+      @staticmethod
+    def _extract_category(message):
+        """Extract complaint category from user message"""
+        # First check for exact matches with the category keys
+        message_words = message.split()
+        for word in message_words:
+            word = word.strip().lower().rstrip('.:,;!')
+            if word in ChatbotService.COMPLAINT_CATEGORIES:
+                return word
+        
+        # If no exact matches, check for partial matches (more flexible)
+        for category in ChatbotService.COMPLAINT_CATEGORIES.keys():
+            if category in message.lower():
+                return category
+                
+        # If still no match, check if any category values are mentioned
+        for key, value in ChatbotService.COMPLAINT_CATEGORIES.items():
+            if value.lower() in message.lower():
+                return key
+                
+        return None
+    
+    @staticmethod
+    def _get_default_response(user):
+        """Get default response when bot doesn't understand"""
+        return "I'm not sure I understand. Here are some things I can help you with:\n\n" \
+               "• **File a complaint** - Report any issues or problems\n" \
+               "• **Get help** - Ask questions about YouCloudPay services\n" \
+               "• **Check FAQ** - Browse frequently asked questions\n\n" \
+               "You can also type 'help' for more options or connect with a human agent."
+    
+    @staticmethod
+    def create_bot_message(content, complaint_id, user_language='en'):
+        """Create a bot message in the database"""
+        try:
+            # Translate content to user's language if needed
+            if user_language != 'en':
+                translated_content = TranslationService.translate_text(content, user_language, 'en')
+            else:
+                translated_content = content
+            
+            # Create bot user if doesn't exist
+            from app.models.user import User
+            bot_user = User.query.filter_by(email='bot@youcloudpay.com').first()
+            if not bot_user:
+                bot_user = User(
+                    name='YouCloudPay Assistant',
+                    email='bot@youcloudpay.com',
+                    password_hash='',
+                    role='bot',
+                    language='en'
+                )
+                from app import db
+                db.session.add(bot_user)
+                db.session.commit()
+            
+            # Create message
+            message = Message(
+                complaint_id=complaint_id,
+                user_id=bot_user.id,
+                content=content,
+                content_translated=translated_content if user_language != 'en' else None,
+                message_type='bot',
+                language='en'
+            )
+            
+            from app import db
+            db.session.add(message)
+            db.session.commit()
+            
+            return message
+            
+        except Exception as e:
+            logger.error(f"Failed to create bot message: {e}")
+            return None

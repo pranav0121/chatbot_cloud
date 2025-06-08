@@ -1,0 +1,301 @@
+{% extends "base.html" %}
+
+{% block title %}{{ _('Profile') }} - YouCloudPay Devshop Support{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 py-8">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <!-- Header -->
+        <div class="bg-white shadow rounded-lg mb-6">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h1 class="text-2xl font-bold text-gray-900">{{ _('My Profile') }}</h1>
+                <p class="mt-1 text-sm text-gray-600">{{ _('Manage your account settings and preferences') }}</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Profile Information -->
+            <div class="lg:col-span-2">
+                <div class="bg-white shadow rounded-lg">
+                    <div class="px-6 py-4 border-b border-gray-200">
+                        <h2 class="text-lg font-medium text-gray-900">{{ _('Profile Information') }}</h2>
+                        <p class="mt-1 text-sm text-gray-600">{{ _('Update your account details and preferences') }}</p>
+                    </div>
+
+                    <form method="POST" class="p-6 space-y-6">
+                        {{ form.hidden_tag() }}
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <!-- Full Name -->
+                            <div>
+                                {{ form.full_name.label(class="block text-sm font-medium text-gray-700") }}
+                                {{ form.full_name(class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md
+                                shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm") }}
+                                {% if form.full_name.errors %}
+                                <div class="mt-1 text-sm text-red-600">
+                                    {% for error in form.full_name.errors %}
+                                    <p>{{ error }}</p>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Email -->
+                            <div>
+                                {{ form.email.label(class="block text-sm font-medium text-gray-700") }}
+                                {{ form.email(class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md
+                                shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm") }}
+                                {% if form.email.errors %}
+                                <div class="mt-1 text-sm text-red-600">
+                                    {% for error in form.email.errors %}
+                                    <p>{{ error }}</p>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Phone -->
+                            <div>
+                                {{ form.phone.label(class="block text-sm font-medium text-gray-700") }}
+                                {{ form.phone(class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md
+                                shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm") }}
+                                {% if form.phone.errors %}
+                                <div class="mt-1 text-sm text-red-600">
+                                    {% for error in form.phone.errors %}
+                                    <p>{{ error }}</p>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Language -->
+                            <div>
+                                {{ form.language.label(class="block text-sm font-medium text-gray-700") }}
+                                {{ form.language(class="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white
+                                rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500
+                                sm:text-sm") }}
+                                {% if form.language.errors %}
+                                <div class="mt-1 text-sm text-red-600">
+                                    {% for error in form.language.errors %}
+                                    <p>{{ error }}</p>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Notification Preferences -->
+                        <div class="border-t border-gray-200 pt-6">
+                            <h3 class="text-lg font-medium text-gray-900 mb-4">{{ _('Notification Preferences') }}</h3>
+                            <div class="space-y-4">
+                                <div class="flex items-start">
+                                    <div class="flex items-center h-5">
+                                        <input id="email_notifications" name="email_notifications" type="checkbox"
+                                            class="focus:ring-blue-500 h-4 w-4 text-blue-600 border-gray-300 rounded" {%
+                                            if current_user.email_notifications %}checked{% endif %}>
+                                    </div>
+                                    <div class="ml-3 text-sm">
+                                        <label for="email_notifications" class="font-medium text-gray-700">{{ _('Email
+                                            notifications') }}</label>
+                                        <p class="text-gray-500">{{ _('Receive email updates about your support
+                                            requests') }}</p>
+                                    </div>
+                                </div>
+
+                                <div class="flex items-start">
+                                    <div class="flex items-center h-5">
+                                        <input id="sms_notifications" name="sms_notifications" type="checkbox"
+                                            class="focus:ring-blue-500 h-4 w-4 text-blue-600 border-gray-300 rounded" {%
+                                            if current_user.sms_notifications %}checked{% endif %}>
+                                    </div>
+                                    <div class="ml-3 text-sm">
+                                        <label for="sms_notifications" class="font-medium text-gray-700">{{ _('SMS
+                                            notifications') }}</label>
+                                        <p class="text-gray-500">{{ _('Receive SMS updates for urgent matters') }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Submit Button -->
+                        <div class="flex justify-end">
+                            {{ form.submit(class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4
+                            rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500") }}
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Change Password -->
+                <div class="bg-white shadow rounded-lg mt-6">
+                    <div class="px-6 py-4 border-b border-gray-200">
+                        <h2 class="text-lg font-medium text-gray-900">{{ _('Change Password') }}</h2>
+                        <p class="mt-1 text-sm text-gray-600">{{ _('Update your password to keep your account secure')
+                            }}</p>
+                    </div>
+
+                    <form method="POST" action="{{ url_for('auth.change_password') }}" class="p-6 space-y-6">
+                        <div class="grid grid-cols-1 gap-6">
+                            <!-- Current Password -->
+                            <div>
+                                <label for="current_password" class="block text-sm font-medium text-gray-700">{{
+                                    _('Current Password') }}</label>
+                                <input type="password" name="current_password" id="current_password" required
+                                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            </div>
+
+                            <!-- New Password -->
+                            <div>
+                                <label for="new_password" class="block text-sm font-medium text-gray-700">{{ _('New
+                                    Password') }}</label>
+                                <input type="password" name="new_password" id="new_password" required
+                                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            </div>
+
+                            <!-- Confirm New Password -->
+                            <div>
+                                <label for="confirm_new_password" class="block text-sm font-medium text-gray-700">{{
+                                    _('Confirm New Password') }}</label>
+                                <input type="password" name="confirm_new_password" id="confirm_new_password" required
+                                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            </div>
+                        </div>
+
+                        <div class="flex justify-end">
+                            <button type="submit"
+                                class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                                {{ _('Update Password') }}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Sidebar -->
+            <div class="space-y-6">
+                <!-- Account Summary -->
+                <div class="bg-white shadow rounded-lg">
+                    <div class="px-6 py-4 border-b border-gray-200">
+                        <h2 class="text-lg font-medium text-gray-900">{{ _('Account Summary') }}</h2>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-gray-600">{{ _('Member since') }}</span>
+                            <span class="text-sm font-medium text-gray-900">{{ current_user.created_at.strftime('%B %Y')
+                                }}</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-gray-600">{{ _('Total complaints') }}</span>
+                            <span class="text-sm font-medium text-gray-900">{{ current_user.complaints.count() }}</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-gray-600">{{ _('Account status') }}</span>
+                            <span
+                                class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {% if current_user.is_active %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
+                                {% if current_user.is_active %}{{ _('Active') }}{% else %}{{ _('Inactive') }}{% endif %}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="bg-white shadow rounded-lg">
+                    <div class="px-6 py-4 border-b border-gray-200">
+                        <h2 class="text-lg font-medium text-gray-900">{{ _('Quick Actions') }}</h2>
+                    </div>
+                    <div class="p-6 space-y-3">
+                        <a href="{{ url_for('main.dashboard') }}"
+                            class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md">
+                            <div class="flex items-center">
+                                <svg class="h-5 w-5 text-gray-400 mr-3" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z">
+                                    </path>
+                                </svg>
+                                {{ _('Go to Dashboard') }}
+                            </div>
+                        </a>
+
+                        <a href="{{ url_for('chat.new_chat') }}"
+                            class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md">
+                            <div class="flex items-center">
+                                <svg class="h-5 w-5 text-gray-400 mr-3" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z">
+                                    </path>
+                                </svg>
+                                {{ _('Start New Chat') }}
+                            </div>
+                        </a>
+
+                        <a href="{{ url_for('main.complaints') }}"
+                            class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md">
+                            <div class="flex items-center">
+                                <svg class="h-5 w-5 text-gray-400 mr-3" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                                    </path>
+                                </svg>
+                                {{ _('View Complaints') }}
+                            </div>
+                        </a>
+
+                        <a href="{{ url_for('main.faq') }}"
+                            class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md">
+                            <div class="flex items-center">
+                                <svg class="h-5 w-5 text-gray-400 mr-3" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z">
+                                    </path>
+                                </svg>
+                                {{ _('Browse FAQ') }}
+                            </div>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Recent Activity -->
+                <div class="bg-white shadow rounded-lg">
+                    <div class="px-6 py-4 border-b border-gray-200">
+                        <h2 class="text-lg font-medium text-gray-900">{{ _('Recent Activity') }}</h2>
+                    </div>
+                    <div class="p-6">
+                        {% if current_user.complaints.limit(5).all() %}
+                        <div class="space-y-3">
+                            {% for complaint in
+                            current_user.complaints.order_by(current_user.complaints.c.created_at.desc()).limit(5) %}
+                            <div class="flex items-start space-x-3">
+                                <div class="flex-shrink-0">
+                                    <div class="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                        <svg class="h-4 w-4 text-blue-600" fill="none" stroke="currentColor"
+                                            viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                                            </path>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="min-w-0 flex-1">
+                                    <p class="text-sm text-gray-900 truncate">
+                                        {{ complaint.subject[:30] }}...
+                                    </p>
+                                    <p class="text-xs text-gray-500">
+                                        {{ complaint.created_at.strftime('%m/%d/%Y') }}
+                                    </p>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <p class="text-sm text-gray-500">{{ _('No recent activity') }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+
+{% block title %}{{ _('My Complaints') }} - YouCloudPay Devshop Support{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 py-8">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <!-- Header -->
+        <div class="bg-white shadow rounded-lg mb-6">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h1 class="text-2xl font-bold text-gray-900">{{ _('My Complaints') }}</h1>
+                        <p class="mt-1 text-sm text-gray-600">{{ _('Track and manage your support requests') }}</p>
+                    </div>
+                    <a href="{{ url_for('main.create_complaint') }}"
+                        class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                        <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                        </svg>
+                        {{ _('New Complaint') }}
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="bg-white shadow rounded-lg mb-6">
+            <div class="px-6 py-4">
+                <form method="GET" class="flex flex-wrap items-center gap-4">
+                    <!-- Status Filter -->
+                    <div class="flex-1 min-w-0">
+                        <label for="status" class="block text-sm font-medium text-gray-700 mb-1">{{ _('Status')
+                            }}</label>
+                        <select name="status" id="status"
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            <option value="">{{ _('All Statuses') }}</option>
+                            <option value="open" {% if request.args.get('status')=='open' %}selected{% endif %}>{{
+                                _('Open') }}</option>
+                            <option value="in_progress" {% if request.args.get('status')=='in_progress' %}selected{%
+                                endif %}>{{ _('In Progress') }}</option>
+                            <option value="resolved" {% if request.args.get('status')=='resolved' %}selected{% endif %}>
+                                {{ _('Resolved') }}</option>
+                            <option value="closed" {% if request.args.get('status')=='closed' %}selected{% endif %}>{{
+                                _('Closed') }}</option>
+                        </select>
+                    </div>
+
+                    <!-- Priority Filter -->
+                    <div class="flex-1 min-w-0">
+                        <label for="priority" class="block text-sm font-medium text-gray-700 mb-1">{{ _('Priority')
+                            }}</label>
+                        <select name="priority" id="priority"
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            <option value="">{{ _('All Priorities') }}</option>
+                            <option value="low" {% if request.args.get('priority')=='low' %}selected{% endif %}>{{
+                                _('Low') }}</option>
+                            <option value="medium" {% if request.args.get('priority')=='medium' %}selected{% endif %}>{{
+                                _('Medium') }}</option>
+                            <option value="high" {% if request.args.get('priority')=='high' %}selected{% endif %}>{{
+                                _('High') }}</option>
+                            <option value="critical" {% if request.args.get('priority')=='critical' %}selected{% endif
+                                %}>{{ _('Critical') }}</option>
+                        </select>
+                    </div>
+
+                    <!-- Search -->
+                    <div class="flex-2 min-w-0">
+                        <label for="search" class="block text-sm font-medium text-gray-700 mb-1">{{ _('Search')
+                            }}</label>
+                        <input type="text" name="search" id="search" value="{{ request.args.get('search', '') }}"
+                            placeholder="{{ _('Search by subject or description...') }}"
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                    </div>
+
+                    <!-- Filter Button -->
+                    <div class="flex-shrink-0">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">&nbsp;</label>
+                        <button type="submit"
+                            class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                            <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.207A1 1 0 013 6.5V4z">
+                                </path>
+                            </svg>
+                            {{ _('Filter') }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Complaints List -->
+        {% if complaints.items %}
+        <div class="bg-white shadow rounded-lg overflow-hidden">
+            <div class="divide-y divide-gray-200">
+                {% for complaint in complaints.items %}
+                <div class="px-6 py-4 hover:bg-gray-50">
+                    <div class="flex items-center justify-between">
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center space-x-3">
+                                <h3 class="text-lg font-medium text-gray-900 truncate">
+                                    <a href="{{ url_for('main.complaint_detail', id=complaint.id) }}"
+                                        class="hover:text-blue-600">
+                                        {{ complaint.subject }}
+                                    </a>
+                                </h3>
+
+                                <!-- Status Badge -->
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
+                                            {% if complaint.status == 'open' %}bg-yellow-100 text-yellow-800
+                                            {% elif complaint.status == 'in_progress' %}bg-blue-100 text-blue-800
+                                            {% elif complaint.status == 'resolved' %}bg-green-100 text-green-800
+                                            {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                    {{ complaint.status.replace('_', ' ').title() }}
+                                </span>
+
+                                <!-- Priority Badge -->
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                            {% if complaint.priority == 'critical' %}bg-red-100 text-red-800
+                                            {% elif complaint.priority == 'high' %}bg-orange-100 text-orange-800
+                                            {% elif complaint.priority == 'medium' %}bg-yellow-100 text-yellow-800
+                                            {% else %}bg-green-100 text-green-800{% endif %}">
+                                    {{ complaint.priority.title() }}
+                                </span>
+                            </div>
+
+                            <p class="mt-1 text-sm text-gray-500 truncate">
+                                {{ complaint.description[:150] }}...
+                            </p>
+
+                            <div class="mt-2 flex items-center space-x-6 text-sm text-gray-500">
+                                <div class="flex items-center">
+                                    <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    {{ _('Created') }}: {{ complaint.created_at.strftime('%m/%d/%Y %H:%M') }}
+                                </div>
+
+                                {% if complaint.updated_at != complaint.created_at %}
+                                <div class="flex items-center">
+                                    <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+                                        </path>
+                                    </svg>
+                                    {{ _('Updated') }}: {{ complaint.updated_at.strftime('%m/%d/%Y %H:%M') }}
+                                </div>
+                                {% endif %}
+
+                                <div class="flex items-center">
+                                    <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z">
+                                        </path>
+                                    </svg>
+                                    {{ complaint.messages.count() }} {{ _('messages') }}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="ml-4 flex-shrink-0 flex items-center space-x-2">
+                            <a href="{{ url_for('main.complaint_detail', id=complaint.id) }}"
+                                class="inline-flex items-center px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                                {{ _('View') }}
+                            </a>
+
+                            {% if complaint.status in ['open', 'in_progress'] %}
+                            <a href="{{ url_for('chat.new_chat', complaint_id=complaint.id) }}"
+                                class="inline-flex items-center px-3 py-1 border border-transparent rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700">
+                                {{ _('Chat') }}
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Pagination -->
+        {% if complaints.pages > 1 %}
+        <div
+            class="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6 mt-6 rounded-lg shadow">
+            <div class="flex-1 flex justify-between sm:hidden">
+                {% if complaints.has_prev %}
+                <a href="{{ url_for('main.complaints', page=complaints.prev_num, **request.args) }}"
+                    class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                    {{ _('Previous') }}
+                </a>
+                {% endif %}
+                {% if complaints.has_next %}
+                <a href="{{ url_for('main.complaints', page=complaints.next_num, **request.args) }}"
+                    class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                    {{ _('Next') }}
+                </a>
+                {% endif %}
+            </div>
+            <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                <div>
+                    <p class="text-sm text-gray-700">
+                        {{ _('Showing') }}
+                        <span class="font-medium">{{ complaints.per_page * (complaints.page - 1) + 1 }}</span>
+                        {{ _('to') }}
+                        <span class="font-medium">{{ complaints.per_page * (complaints.page - 1) +
+                            complaints.items|length }}</span>
+                        {{ _('of') }}
+                        <span class="font-medium">{{ complaints.total }}</span>
+                        {{ _('results') }}
+                    </p>
+                </div>
+                <div>
+                    <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
+                        {% if complaints.has_prev %}
+                        <a href="{{ url_for('main.complaints', page=complaints.prev_num, **request.args) }}"
+                            class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M15 19l-7-7 7-7"></path>
+                            </svg>
+                        </a>
+                        {% endif %}
+
+                        {% for page_num in complaints.iter_pages() %}
+                        {% if page_num %}
+                        {% if page_num != complaints.page %}
+                        <a href="{{ url_for('main.complaints', page=page_num, **request.args) }}"
+                            class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            {{ page_num }}
+                        </a>
+                        {% else %}
+                        <span
+                            class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-blue-50 text-sm font-medium text-blue-600">
+                            {{ page_num }}
+                        </span>
+                        {% endif %}
+                        {% else %}
+                        <span
+                            class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
+                            ...
+                        </span>
+                        {% endif %}
+                        {% endfor %}
+
+                        {% if complaints.has_next %}
+                        <a href="{{ url_for('main.complaints', page=complaints.next_num, **request.args) }}"
+                            class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7">
+                                </path>
+                            </svg>
+                        </a>
+                        {% endif %}
+                    </nav>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        {% else %}
+        <!-- Empty State -->
+        <div class="bg-white shadow rounded-lg">
+            <div class="px-6 py-12 text-center">
+                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                    </path>
+                </svg>
+                <h3 class="mt-4 text-lg font-medium text-gray-900">
+                    {% if request.args.get('search') or request.args.get('status') or request.args.get('priority') %}
+                    {{ _('No complaints found') }}
+                    {% else %}
+                    {{ _('No complaints yet') }}
+                    {% endif %}
+                </h3>
+                <p class="mt-2 text-sm text-gray-500">
+                    {% if request.args.get('search') or request.args.get('status') or request.args.get('priority') %}
+                    {{ _('Try adjusting your search filters.') }}
+                    {% else %}
+                    {{ _('You haven\'t submitted any support requests yet.') }}
+                    {% endif %}
+                </p>
+                <div class="mt-6">
+                    {% if request.args.get('search') or request.args.get('status') or request.args.get('priority') %}
+                    <a href="{{ url_for('main.complaints') }}"
+                        class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                        {{ _('Clear Filters') }}
+                    </a>
+                    {% else %}
+                    <a href="{{ url_for('main.create_complaint') }}"
+                        class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+                        <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                        </svg>
+                        {{ _('Create First Complaint') }}
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

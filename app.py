@@ -9,6 +9,7 @@ from werkzeug.utils import secure_filename
 from werkzeug.datastructures import FileStorage
 from PIL import Image
 import uuid
+from sqlalchemy import text
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -18,16 +19,31 @@ app = Flask(__name__)
 config_obj = Config()
 app.config.from_object(config_obj)
 
-# Set the database URI properly
-try:
-    app.config['SQLALCHEMY_DATABASE_URI'] = config_obj.SQLALCHEMY_DATABASE_URI
-except Exception as e:
-    logger.warning(f"Failed to set SQL Server URI, falling back to SQLite: {e}")
-    app.config['SQLALCHEMY_DATABASE_URI'] = config_obj.SQLALCHEMY_DATABASE_URI_FALLBACK
+# Enhanced database connection with better error handling
+def setup_database():
+    """Setup database connection with comprehensive error handling"""
+    try:
+        app.config['SQLALCHEMY_DATABASE_URI'] = config_obj.SQLALCHEMY_DATABASE_URI
+        logger.info(f"Database URI configured: {config_obj.SQLALCHEMY_DATABASE_URI}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to configure database URI: {e}")
+        try:
+            app.config['SQLALCHEMY_DATABASE_URI'] = config_obj.SQLALCHEMY_DATABASE_URI_FALLBACK
+            logger.warning("Falling back to SQLite database")
+            return True
+        except Exception as fallback_error:
+            logger.error(f"Even fallback database failed: {fallback_error}")
+            return False
+
+# Setup database
+if not setup_database():
+    logger.critical("Database setup failed completely")
+    exit(1)
 
 db = SQLAlchemy(app)
 
-# Add proper session management to prevent connection pool exhaustion
+# Enhanced session management
 @app.teardown_appcontext
 def close_db(error):
     """Close database connections after each request"""
@@ -45,6 +61,18 @@ def close_db_session(exception):
         db.session.close()
     except Exception as e:
         logger.error(f"Error in teardown_request: {str(e)}")
+
+# Database health check function
+def check_database_health():
+    """Check if database is accessible and working"""
+    try:
+        db.session.execute(text('SELECT 1'))
+        db.session.commit()
+        return True, "Database connection healthy"
+    except Exception as e:
+        error_msg = f"Database health check failed: {str(e)}"
+        logger.error(error_msg)
+        return False, error_msg
 
 # File upload configuration
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads')
@@ -80,7 +108,7 @@ class Ticket(db.Model):
     TicketID = db.Column(db.Integer, primary_key=True)
     UserID = db.Column(db.Integer, db.ForeignKey('Users.UserID'))
     CategoryID = db.Column(db.Integer, db.ForeignKey('Categories.CategoryID'))
-    Subject = db.Column(db.String(255, 'utf8mb4_bin'), nullable=False)
+    Subject = db.Column(db.String(255), nullable=False)
     Status = db.Column(db.String(20), default='open')
     CreatedAt = db.Column(db.DateTime, default=datetime.utcnow)
     UpdatedAt = db.Column(db.DateTime, default=datetime.utcnow)
@@ -650,7 +678,7 @@ def get_dashboard_stats():
         
         # Test database connection first
         try:
-            db.session.execute('SELECT 1')
+            db.session.execute(text('SELECT 1'))
             logger.info("Database connection successful")
         except Exception as db_error:
             logger.error(f"Database connection failed: {str(db_error)}")
@@ -725,7 +753,7 @@ def get_admin_tickets():
         
         # Test database connection
         try:
-            db.session.execute('SELECT 1')
+            db.session.execute(text('SELECT 1'))
             logger.info("Database connection successful for tickets")
         except Exception as db_error:
             logger.error(f"Database connection failed in tickets: {str(db_error)}")
@@ -1026,138 +1054,65 @@ def submit_feedback():
         logger.error(f"Error submitting feedback: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/health', methods=['GET'])
+@app.route('/health', methods=['GET'])
 def health_check():
-    """Simple health check endpoint"""
-    return jsonify({
-        "status": "healthy",
-        "message": "Customer Support System is running",
-        "timestamp": datetime.utcnow().isoformat()
-    })
-
-@app.route('/api/diagnose', methods=['GET'])
-def diagnose_database():
-    """Endpoint to diagnose database connection issues"""
-    diagnosis = {
-        'status': 'checking',
-        'config': {},
-        'drivers': [],
-        'connections': [],
-        'recommendations': []
-    }
-    
+    """Enhanced health check endpoint"""
     try:
-        # Get configuration info
-        config = Config()
-        diagnosis['config'] = {
-            'DB_SERVER': config.DB_SERVER,
-            'DB_DATABASE': config.DB_DATABASE,
-            'DB_USERNAME': config.DB_USERNAME,
-            'DB_USE_WINDOWS_AUTH': getattr(config, 'DB_USE_WINDOWS_AUTH', 'Not set'),
-            'SQLALCHEMY_DATABASE_URI': config.SQLALCHEMY_DATABASE_URI
-        }
+        health_status, health_message = check_database_health()
         
-        # List available ODBC drivers
-        try:
-            drivers = pyodbc.drivers()
-            sql_drivers = [d for d in drivers if 'SQL Server' in d or 'sql' in d.lower()]
-            diagnosis['drivers'] = sql_drivers
-        except Exception as e:
-            diagnosis['drivers'] = f"Error listing drivers: {str(e)}"
-        
-        # Test different connection strings
-        test_connections = [
-            {
-                'name': 'Current SQLAlchemy Config',
-                'conn_str': config.SQLALCHEMY_DATABASE_URI
-            }
-        ]
-        
-        # Add Windows Authentication options
-        for driver in ['ODBC Driver 17 for SQL Server', 'SQL Server Native Client 11.0', 'SQL Server']:
-            test_connections.append({
-                'name': f'Windows Auth - {driver}',
-                'conn_str': f'DRIVER={{{driver}}};SERVER={config.DB_SERVER};DATABASE={config.DB_DATABASE};Trusted_Connection=yes;'
-            })
-        
-        # Test each connection
-        for test in test_connections:
-            connection_result = {
-                'name': test['name'],
-                'conn_str': test['conn_str'],
-                'status': 'failed',
-                'error': None,
-                'database_exists': False,
-                'tables': []
-            }
-            
-            try:
-                if test['name'] == 'Current SQLAlchemy Config':
-                    # Test SQLAlchemy connection
-                    from sqlalchemy import create_engine
-                    engine = create_engine(test['conn_str'])
-                    with engine.connect() as conn:
-                        result = conn.execute("SELECT @@VERSION")
-                        version = result.fetchone()[0]
-                        connection_result['status'] = 'success'
-                        connection_result['version'] = version[:100]
-                else:
-                    # Test pyodbc connection
-                    conn = pyodbc.connect(test['conn_str'], timeout=10)
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT @@VERSION")
-                    version = cursor.fetchone()[0]
-                    connection_result['status'] = 'success'
-                    connection_result['version'] = version[:100]
-                    
-                    # Check if database exists
-                    try:
-                        cursor.execute("SELECT DB_ID('SupportChatbot')")
-                        db_id = cursor.fetchone()[0]
-                        if db_id:
-                            connection_result['database_exists'] = True
-                            
-                            # Check tables
-                            cursor.execute("USE SupportChatbot; SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'")
-                            tables = cursor.fetchall()
-                            connection_result['tables'] = [t[0] for t in tables]
-                    except Exception as db_e:
-                        connection_result['database_check_error'] = str(db_e)
-                    
-                    cursor.close()
-                    conn.close()
-                    
-            except Exception as e:
-                connection_result['error'] = str(e)
-            
-            diagnosis['connections'].append(connection_result)
-        
-        # Generate recommendations
-        working_connections = [c for c in diagnosis['connections'] if c['status'] == 'success']
-        
-        if not working_connections:
-            diagnosis['recommendations'].append("No database connections successful. Check if SQL Server is running.")
-            diagnosis['recommendations'].append("Try: Get-Service -Name 'MSSQL$SQLEXPRESS'")
-            diagnosis['recommendations'].append("Verify server name: " + config.DB_SERVER)
+        if health_status:
+            return jsonify({
+                "status": "healthy",
+                "database": "connected",
+                "message": health_message,
+                "timestamp": datetime.utcnow().isoformat()
+            }), 200
         else:
-            working_conn = working_connections[0]
-            if not working_conn.get('database_exists', False):
-                diagnosis['recommendations'].append("Database connection successful but SupportChatbot database doesn't exist.")
-                diagnosis['recommendations'].append("Run the database setup script to create the database.")
-            elif len(working_conn.get('tables', [])) == 0:
-                diagnosis['recommendations'].append("Database exists but no tables found.")
-                diagnosis['recommendations'].append("Run the table creation script.")
-            else:
-                diagnosis['recommendations'].append("Database connection and tables look good!")
-                diagnosis['recommendations'].append("The issue might be in the SQLAlchemy configuration.")
+            return jsonify({
+                "status": "unhealthy",
+                "database": "disconnected",
+                "error": health_message,
+                "timestamp": datetime.utcnow().isoformat()
+            }), 503
+            
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat()
+        }), 500
+
+@app.route('/api/database/test', methods=['GET'])
+def test_database():
+    """Test database operations"""
+    try:
+        # Test basic connection
+        health_status, health_message = check_database_health()
+        if not health_status:
+            return jsonify({"error": health_message}), 500
         
-        diagnosis['status'] = 'completed'
+        # Test table access
+        category_count = Category.query.count()
+        ticket_count = Ticket.query.count()
+        user_count = User.query.count()
+        
+        return jsonify({
+            "status": "success",
+            "database": "connected",
+            "tables": {
+                "categories": category_count,
+                "tickets": ticket_count,
+                "users": user_count
+            },
+            "message": "All database operations successful"
+        })
         
     except Exception as e:
-        diagnosis['status'] = 'error'
-        diagnosis['error'] = str(e)
-    
-    return jsonify(diagnosis)
+        logger.error(f"Database test failed: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "error": str(e)
+        }), 500
 
 @app.route('/api/tickets/<int:ticket_id>', methods=['GET'])
 def get_ticket_details(ticket_id):

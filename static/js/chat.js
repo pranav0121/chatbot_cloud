@@ -1948,3 +1948,178 @@ window.sendMessage = async function (content, isAdmin = false) {
         return await originalSendMessageFunction(content, isAdmin);
     }
 };
+
+// File upload functionality
+let isFileUploadVisible = false;
+
+// Initialize file upload when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    setupFileUploadHandlers();
+});
+
+function setupFileUploadHandlers() {
+    // Attach button handler
+    const attachBtn = document.getElementById('attach-btn');
+    if (attachBtn) {
+        attachBtn.addEventListener('click', toggleFileUpload);
+    }
+
+    // File upload areas
+    setupFileUploadArea('file-upload-area', 'file-input');
+    setupFileUploadArea('form-file-upload-area', 'form-file-input');
+}
+
+function toggleFileUpload() {
+    const fileUploadArea = document.getElementById('file-upload-area');
+    const filePreview = document.getElementById('file-preview');
+
+    if (!fileUploadArea) return;
+
+    isFileUploadVisible = !isFileUploadVisible;
+
+    if (isFileUploadVisible) {
+        fileUploadArea.classList.add('active');
+        if (filePreview && filePreview.style.display !== 'none') {
+            filePreview.style.display = 'block';
+        }
+    } else {
+        fileUploadArea.classList.remove('active');
+        if (filePreview && filePreview.children.length === 0) {
+            filePreview.style.display = 'none';
+        }
+    }
+}
+
+function setupFileUploadArea(uploadAreaId, fileInputId) {
+    const uploadArea = document.getElementById(uploadAreaId);
+    const fileInput = document.getElementById(fileInputId);
+
+    if (!uploadArea || !fileInput) return;
+
+    // Click to browse
+    uploadArea.addEventListener('click', () => {
+        fileInput.click();
+    });
+
+    // File selection handler
+    fileInput.addEventListener('change', (e) => {
+        handleFileSelection(e.target.files, uploadAreaId);
+    });
+
+    // Drag and drop handlers
+    uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadArea.classList.add('drag-active');
+    });
+
+    uploadArea.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('drag-active');
+    });
+
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('drag-active');
+        handleFileSelection(e.dataTransfer.files, uploadAreaId);
+    });
+}
+
+function handleFileSelection(files, uploadAreaId) {
+    const previewId = uploadAreaId.includes('form') ? 'form-file-preview' : 'file-preview';
+    const preview = document.getElementById(previewId);
+
+    if (!preview) return;
+
+    Array.from(files).forEach(file => {
+        if (isValidFile(file)) {
+            addFileToPreview(file, preview);
+            selectedFiles.push(file);
+        } else {
+            showErrorMessage(`Invalid file: ${file.name}. Only images (JPG, PNG, GIF) up to 10MB are allowed.`);
+        }
+    });
+
+    if (preview.children.length > 0) {
+        preview.style.display = 'block';
+    }
+}
+
+function isValidFile(file) {
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/bmp', 'image/webp'];
+    const maxSize = 10 * 1024 * 1024; // 10MB
+
+    return allowedTypes.includes(file.type) && file.size <= maxSize;
+}
+
+function addFileToPreview(file, preview) {
+    const fileItem = document.createElement('div');
+    fileItem.className = 'file-item';
+
+    const fileInfo = document.createElement('div');
+    fileInfo.className = 'file-info';
+
+    // Create thumbnail
+    const thumbnail = document.createElement('img');
+    thumbnail.className = 'file-thumbnail';
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        thumbnail.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+
+    // File details
+    const details = document.createElement('div');
+    details.className = 'file-details';
+    details.innerHTML = `
+        <div class="file-name">${file.name}</div>
+        <div class="file-size">${formatFileSize(file.size)}</div>
+    `;
+
+    // Remove button
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'btn-remove';
+    removeBtn.innerHTML = '<i class="fas fa-times"></i>';
+    removeBtn.onclick = () => {
+        removeFileFromPreview(fileItem, file);
+    };
+
+    fileInfo.appendChild(thumbnail);
+    fileInfo.appendChild(details);
+    fileItem.appendChild(fileInfo);
+    fileItem.appendChild(removeBtn);
+
+    preview.appendChild(fileItem);
+}
+
+function removeFileFromPreview(fileItem, file) {
+    // Remove from selectedFiles array
+    const index = selectedFiles.findIndex(f => f.name === file.name && f.size === file.size);
+    if (index > -1) {
+        selectedFiles.splice(index, 1);
+    }
+
+    // Remove from DOM
+    fileItem.remove();
+
+    // Hide preview if empty
+    const preview = fileItem.closest('.file-preview');
+    if (preview && preview.children.length === 0) {
+        preview.style.display = 'none';
+
+        // Hide file upload area if no files
+        const uploadArea = document.getElementById('file-upload-area');
+        if (uploadArea && selectedFiles.length === 0) {
+            uploadArea.classList.remove('active');
+            isFileUploadVisible = false;
+        }
+    }
+}
+
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}

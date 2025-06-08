@@ -705,12 +705,26 @@ body {
 .file-upload-area {
     border: 2px dashed #dee2e6;
     border-radius: 8px;
-    padding: 2rem;
+    padding: 1rem;
     text-align: center;
     background: #f8f9fa;
     cursor: pointer;
     transition: all 0.3s ease;
-    margin: 1rem 0;
+    margin: 0.5rem 0;
+    display: none;
+    /* Hidden by default */
+}
+
+/* Compact file upload for chat */
+.live-chat .file-upload-area {
+    padding: 0.75rem;
+    margin: 0.25rem 0;
+    border-radius: 6px;
+}
+
+/* Show file upload area when active */
+.file-upload-area.active {
+    display: block;
 }
 
 .file-upload-area:hover,
@@ -721,19 +735,36 @@ body {
 }
 
 .file-upload-area .upload-content i {
-    font-size: 2rem;
+    font-size: 1.5rem;
     color: #6c757d;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.25rem;
 }
 
 .file-upload-area .upload-content p {
-    margin: 0.5rem 0;
+    margin: 0.25rem 0;
     font-weight: 500;
     color: #495057;
+    font-size: 0.9rem;
 }
 
 .file-upload-area .upload-content small {
     color: #6c757d;
+    font-size: 0.8rem;
+}
+
+/* Compact styles for live chat */
+.live-chat .file-upload-area .upload-content i {
+    font-size: 1.2rem;
+    margin-bottom: 0.15rem;
+}
+
+.live-chat .file-upload-area .upload-content p {
+    font-size: 0.8rem;
+    margin: 0.15rem 0;
+}
+
+.live-chat .file-upload-area .upload-content small {
+    font-size: 0.7rem;
 }
 
 /* File Preview Styles */
@@ -883,11 +914,19 @@ body {
 /* Responsive File Upload */
 @media (max-width: 576px) {
     .file-upload-area {
-        padding: 1.5rem 1rem;
+        padding: 1rem 0.75rem;
+    }
+
+    .live-chat .file-upload-area {
+        padding: 0.5rem;
     }
 
     .file-upload-area .upload-content i {
-        font-size: 1.5rem;
+        font-size: 1.25rem;
+    }
+
+    .live-chat .file-upload-area .upload-content i {
+        font-size: 1rem;
     }
 
     .pasted-image-preview img.pasted-image-thumbnail {

@@ -67,6 +67,16 @@ document.addEventListener('DOMContentLoaded', () => {
     loadQuickCategories();
     setupEventListeners();
 
+    // Initialize Socket.IO for real-time chat
+    window.chatSocket = io();
+
+    // Listen for new messages from server
+    chatSocket.on('new_message', (data) => {
+        if (data.ticket_id === currentTicketId) {
+            addChatMessage(data.content, data.is_admin ? 'admin' : 'user', data.created_at);
+        }
+    });
+
     // Test API connectivity
     testApiConnection();
 });
@@ -91,6 +101,35 @@ function setupEventListeners() {
         const activeRating = document.querySelector('.rating-stars i.active:last-of-type')?.dataset.rating || 0;
         highlightStars(activeRating);
     });
+    // Paste images from clipboard
+    const liveInput = document.getElementById('live-chat-message-input');
+    if (liveInput) {
+        liveInput.addEventListener('paste', handlePaste);
+    }
+    // File attach button
+    const attachBtn = document.getElementById('attach-btn');
+    const fileInput = document.getElementById('file-input');
+    if (attachBtn && fileInput) {
+        attachBtn.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => {
+            for (const file of e.target.files) {
+                uploadAndSendFile(file);
+            }
+            fileInput.value = '';
+        });
+    }
+    // Drag & drop upload
+    const dropArea = document.getElementById('file-upload-area');
+    if (dropArea) {
+        dropArea.addEventListener('dragover', (e) => { e.preventDefault(); dropArea.classList.add('drag-over'); });
+        dropArea.addEventListener('dragleave', (e) => { e.preventDefault(); dropArea.classList.remove('drag-over'); });
+        dropArea.addEventListener('drop', (e) => {
+            e.preventDefault(); dropArea.classList.remove('drag-over');
+            for (const file of e.dataTransfer.files) {
+                uploadAndSendFile(file);
+            }
+        });
+    }
 }
 
 // Load categories for chat widget
@@ -791,25 +830,12 @@ async function sendMessage() {
     if (!message || !currentTicketId) return;
 
     try {
-        const response = await fetch(`/api/tickets/${currentTicketId}/messages`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                content: message,
-                user_id: currentUser?.id
-            })
-        });
-
-        const data = await response.json();
-
-        if (data.status === 'success') {
-            addChatMessage(message, 'user', new Date().toISOString());
-            input.value = '';
-        }
+        // Send message via WebSocket
+        chatSocket.emit('send_message', { ticket_id: currentTicketId, content: message });
+        addChatMessage(message, 'user', new Date().toISOString());
+        input.value = '';
     } catch (error) {
-        console.error('Error sending message:', error);
+        console.error('Error sending message via WebSocket:', error);
         showNotification('Error sending message. Please try again.', 'error');
     }
 }
@@ -1072,41 +1098,7 @@ async function submitTicket() {
     }
 }
 
-// Send a new message
-async function sendMessage() {
-    const input = document.getElementById('message-input');
-    const message = input.value.trim();
 
-    if (!message) return;
-
-    if (!currentTicketId) {
-        addMessage('Please start a new ticket first.', 'system');
-        return;
-    }
-
-    try {
-        const response = await fetch(`/api/tickets/${currentTicketId}/messages`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                content: message,
-                user_id: currentUser?.id
-            })
-        });
-
-        const data = await response.json();
-
-        if (data.status === 'success') {
-            addMessage(message, 'user');
-            input.value = '';
-        }
-    } catch (error) {
-        console.error('Error sending message:', error);
-        addMessage('Error sending message. Please try again.', 'system');
-    }
-}
 
 // Toggle chat widget
 function toggleChat() {

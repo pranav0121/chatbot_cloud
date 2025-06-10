@@ -750,6 +750,35 @@ window.addEventListener('beforeunload', () => {
     stopAutoRefresh();
 });
 
+// Admin authentication functions
+function adminLogout() {
+    if (confirm('Are you sure you want to logout from the admin panel?')) {
+        window.location.href = '/auth/admin/logout';
+    }
+}
+
+// Check admin authentication on page load
+document.addEventListener('DOMContentLoaded', () => {
+    // Add authentication check for admin APIs
+    const originalFetch = window.fetch;
+    window.fetch = function (...args) {
+        return originalFetch.apply(this, args)
+            .then(response => {
+                if (response.status === 401) {
+                    // Admin session expired
+                    alert('Admin session expired. Please login again.');
+                    window.location.href = '/auth/admin/login';
+                    return Promise.reject(new Error('Authentication required'));
+                }
+                return response;
+            })
+            .catch(error => {
+                console.error('Fetch error:', error);
+                throw error;
+            });
+    };
+});
+
 // Chat from ticket modal
 function openLiveChat() {
     if (currentTicketId) {

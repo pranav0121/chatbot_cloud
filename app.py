@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, send_from_directory, url_for, redirect
+from flask import Flask, render_template, request, jsonify, send_from_directory, url_for, redirect, session, flash
 from flask_login import LoginManager, login_required, current_user, UserMixin
 from flask_babel import Babel, _
 from flask_sqlalchemy import SQLAlchemy
@@ -13,6 +13,7 @@ from PIL import Image
 import uuid
 from sqlalchemy import text
 from sqlalchemy.sql import case
+from functools import wraps
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -402,6 +403,19 @@ class Attachment(db.Model):
 # Register authentication blueprint after models are defined
 from auth import auth_bp
 app.register_blueprint(auth_bp)
+
+# Admin authentication helper function
+def admin_required(f):
+    """Decorator to require admin authentication for API endpoints"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('admin_logged_in'):
+            return jsonify({
+                'error': 'Admin authentication required',
+                'message': 'Please log in as an administrator to access this resource'
+            }), 401
+        return f(*args, **kwargs)
+    return decorated_function
 
 # Routes
 @app.route('/test')
@@ -983,6 +997,13 @@ def uploaded_file(filename):
 
 @app.route('/admin')
 def admin_dashboard():
+    # Check if admin is authenticated
+    from flask import session, redirect, url_for, flash
+    
+    if not session.get('admin_logged_in'):
+        flash('Admin authentication required to access the dashboard.', 'error')
+        return redirect(url_for('auth.admin_login'))
+    
     return render_template('admin.html')
 
 @app.route('/debug-admin')
@@ -991,6 +1012,7 @@ def debug_admin():
     return render_template('debug_admin.html')
 
 @app.route('/api/admin/dashboard-stats', methods=['GET'])
+@admin_required
 def get_dashboard_stats():
     try:
         logger.info("Loading dashboard stats...")
@@ -1043,6 +1065,7 @@ def get_dashboard_stats():
         }), 500
 
 @app.route('/api/admin/recent-activity', methods=['GET'])
+@admin_required
 def get_recent_activity():
     try:
         # Get recent tickets and messages
@@ -1066,6 +1089,7 @@ def get_recent_activity():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/admin/tickets', methods=['GET'])
+@admin_required
 def get_admin_tickets():
     try:
         logger.info("Loading admin tickets...")
@@ -1176,6 +1200,7 @@ def get_admin_tickets():
         return jsonify([])  # Return empty array instead of error
 
 @app.route('/api/admin/tickets/<int:ticket_id>', methods=['GET'])
+@admin_required
 def get_admin_ticket_details(ticket_id):
     try:
         logger.info(f"Loading admin ticket details for ticket ID: {ticket_id}")
@@ -1244,6 +1269,7 @@ def get_admin_ticket_details(ticket_id):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/admin/active-conversations', methods=['GET'])
+@admin_required
 def get_active_conversations():
     try:
         # Get tickets with recent activity
@@ -1276,6 +1302,7 @@ def get_active_conversations():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/admin/tickets/<int:ticket_id>/status', methods=['PUT'])
+@admin_required
 def update_ticket_status(ticket_id):
     try:
         data = request.json
@@ -1338,6 +1365,7 @@ def update_ticket_status(ticket_id):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/admin/analytics', methods=['GET'])
+@admin_required
 def get_analytics():
     try:
         # Category distribution
@@ -1626,6 +1654,8 @@ def update_user_profile():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
+    import socket
+    
     try:
         # Test database connection
         with app.app_context():
@@ -1636,7 +1666,6 @@ if __name__ == '__main__':
         print("Please check your database connection settings in .env file")
     
     # Try to find an available port
-    import socket
     def find_free_port():
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind(('', 0))

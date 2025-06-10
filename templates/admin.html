@@ -108,9 +108,18 @@
                             <option value="resolved">Resolved</option>
                             <option value="closed">Closed</option>
                         </select>
+                        <select class="form-select" id="priority-filter" onchange="filterTickets()">
+                            <option value="">All Priorities</option>
+                            <option value="critical">Critical</option>
+                            <option value="high">High</option>
+                            <option value="medium">Medium</option>
+                            <option value="low">Low</option>
+                        </select>
                         <select class="form-select" id="category-filter" onchange="filterTickets()">
                             <option value="">All Categories</option>
                         </select>
+                        <input type="text" class="form-control" id="organization-filter"
+                            placeholder="Filter by organization..." onkeyup="filterTickets()">
                     </div>
                 </div>
                 <div class="tickets-table">
@@ -119,6 +128,8 @@
                             <tr>
                                 <th>ID</th>
                                 <th>Subject</th>
+                                <th>Priority</th>
+                                <th>Organization</th>
                                 <th>Category</th>
                                 <th>User</th>
                                 <th>Status</th>

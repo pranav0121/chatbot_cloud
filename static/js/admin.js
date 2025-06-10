@@ -5,6 +5,21 @@ let refreshInterval = null;
 
 // Initialize admin dashboard
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM Content Loaded - Starting admin dashboard initialization...');
+
+    // Test if we can reach the server
+    fetch('/api/admin/dashboard-stats')
+        .then(response => {
+            console.log('Initial server test response status:', response.status);
+            return response.json();
+        })
+        .then(data => {
+            console.log('Initial server test data:', data);
+        })
+        .catch(error => {
+            console.error('Initial server test failed:', error);
+        });
+
     loadDashboardData();
     loadCategories();
     loadTickets();
@@ -12,6 +27,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Start auto-refresh for live chat
     startAutoRefresh();
+
+    console.log('Admin dashboard initialization complete');
 });
 
 // Navigation functions
@@ -51,10 +68,22 @@ function showSection(sectionName) {
 
 // Dashboard functions
 async function loadDashboardData() {
+    console.log('=== loadDashboardData CALLED ===');
+    console.log('Current URL:', window.location.href);
+    console.log('Fetching dashboard stats...');
+
     try {
         console.log('Loading dashboard data...');
-        const response = await fetch('/api/admin/dashboard-stats');
 
+        // Add timeout to the fetch request
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+        const response = await fetch('/api/admin/dashboard-stats', {
+            signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
         console.log('Dashboard response status:', response.status);
 
         if (!response.ok) {
@@ -73,22 +102,47 @@ async function loadDashboardData() {
             return;
         }
 
-        document.getElementById('total-tickets').textContent = stats.totalTickets || 0;
-        document.getElementById('pending-tickets').textContent = stats.pendingTickets || 0;
-        document.getElementById('resolved-tickets').textContent = stats.resolvedTickets || 0;
-        document.getElementById('active-chats').textContent = stats.activeChats || 0;
+        // Update dashboard stats with fallback values
+        const totalElement = document.getElementById('total-tickets');
+        const pendingElement = document.getElementById('pending-tickets');
+        const resolvedElement = document.getElementById('resolved-tickets');
+        const activeElement = document.getElementById('active-chats');
+
+        if (totalElement) totalElement.textContent = stats.totalTickets || 0;
+        if (pendingElement) pendingElement.textContent = stats.pendingTickets || 0;
+        if (resolvedElement) resolvedElement.textContent = stats.resolvedTickets || 0;
+        if (activeElement) activeElement.textContent = stats.activeChats || 0;
 
         console.log('Dashboard stats updated successfully');
+
+        // Load recent activity after dashboard stats are loaded
         loadRecentActivity();
 
     } catch (error) {
         console.error('Error loading dashboard data:', error);
-        showNotification('Failed to load dashboard data. Please check the server connection.', 'error');
 
-        // Set fallback values
-        document.getElementById('total-tickets').textContent = '?';
-        document.getElementById('pending-tickets').textContent = '?';
-        document.getElementById('resolved-tickets').textContent = '?';
+        let errorMessage = 'Failed to load dashboard data. ';
+        if (error.name === 'AbortError') {
+            errorMessage += 'Request timed out.';
+        } else if (error.message.includes('Failed to fetch')) {
+            errorMessage += 'Please check if the server is running.';
+        } else {
+            errorMessage += 'Please check the server connection.';
+        }
+
+        showNotification(errorMessage, 'error');
+
+        // Set fallback values with proper null checks
+        const elements = [
+            'total-tickets', 'pending-tickets', 'resolved-tickets', 'active-chats'
+        ];
+
+        elements.forEach(id => {
+            const element = document.getElementById(id);
+            if (element) {
+                element.textContent = '?';
+            }
+        });
         document.getElementById('active-chats').textContent = '?';
     }
 }
@@ -176,6 +230,11 @@ async function loadTickets() {
             <tr class="fade-in">
                 <td>#${ticket.id}</td>
                 <td>${ticket.subject || 'No subject'}</td>
+                <td><span class="priority-badge priority-${ticket.priority || 'medium'}">${(ticket.priority || 'medium').toUpperCase()}</span></td>
+                <td class="organization-cell">
+                    <div class="organization-name">${ticket.organization || 'Unknown Org'}</div>
+                    <small class="text-muted">${ticket.user_name || 'Anonymous'}</small>
+                </td>
                 <td>${ticket.category || 'Unknown'}</td>
                 <td>${ticket.user_name || 'Anonymous'}</td>
                 <td><span class="status-badge status-${ticket.status}">${ticket.status.replace('_', ' ')}</span></td>
@@ -206,10 +265,32 @@ async function loadTickets() {
 
 function filterTickets() {
     const statusFilter = document.getElementById('status-filter').value;
+    const priorityFilter = document.getElementById('priority-filter').value;
     const categoryFilter = document.getElementById('category-filter').value;
+    const organizationFilter = document.getElementById('organization-filter').value.toLowerCase();
 
-    // Apply filters (implement filtering logic)
-    loadTickets(); // For now, just reload all tickets
+    const rows = document.querySelectorAll('#tickets-tbody tr');
+
+    rows.forEach(row => {
+        const cells = row.cells;
+        if (cells.length < 8) return; // Skip header or malformed rows
+
+        const status = cells[6].textContent.toLowerCase().trim();
+        const priority = cells[2].textContent.toLowerCase().trim();
+        const category = cells[4].textContent.toLowerCase().trim();
+        const organization = cells[3].textContent.toLowerCase().trim();
+
+        const statusMatch = !statusFilter || status.includes(statusFilter.replace('_', ' '));
+        const priorityMatch = !priorityFilter || priority.includes(priorityFilter);
+        const categoryMatch = !categoryFilter || category.includes(categoryFilter.toLowerCase());
+        const organizationMatch = !organizationFilter || organization.includes(organizationFilter);
+
+        if (statusMatch && priorityMatch && categoryMatch && organizationMatch) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
 }
 
 async function viewTicket(ticketId) {
@@ -240,12 +321,20 @@ async function viewTicket(ticketId) {
         document.getElementById('ticket-details').innerHTML = `
             <div class="ticket-info">
                 <h6>Ticket #${ticket.id}</h6>
-                <p><strong>Subject:</strong> ${ticket.subject}</p>
-                <p><strong>Category:</strong> ${ticket.category}</p>
-                <p><strong>Status:</strong> <span class="status-badge status-${ticket.status}">${ticket.status.replace('_', ' ')}</span></p>
-                <p><strong>User:</strong> ${ticket.user_name || 'Anonymous'}</p>
-                <p><strong>Email:</strong> ${ticket.user_email || 'Not provided'}</p>
-                <p><strong>Created:</strong> ${formatTime(ticket.created_at)}</p>
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Subject:</strong> ${ticket.subject}</p>
+                        <p><strong>Category:</strong> ${ticket.category}</p>
+                        <p><strong>Priority:</strong> <span class="priority-badge priority-${ticket.priority || 'medium'}">${(ticket.priority || 'medium').toUpperCase()}</span></p>
+                        <p><strong>Status:</strong> <span class="status-badge status-${ticket.status}">${ticket.status.replace('_', ' ')}</span></p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Organization:</strong> <span class="fw-bold text-primary">${ticket.organization || 'Unknown Organization'}</span></p>
+                        <p><strong>User:</strong> ${ticket.user_name || 'Anonymous'}</p>
+                        <p><strong>Email:</strong> ${ticket.user_email || 'Not provided'}</p>
+                        <p><strong>Created:</strong> ${formatTime(ticket.created_at)}</p>
+                    </div>
+                </div>
                 <div class="ticket-messages">
                     <h6>Messages:</h6>
                     ${ticket.messages.map(msg => {

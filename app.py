@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, jsonify, send_from_directory,
 from flask_login import LoginManager, login_required, current_user, UserMixin
 from flask_babel import Babel, _
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
+from datetime import datetime, timezone
 import pyodbc
 import logging
 from config import Config
@@ -14,10 +14,21 @@ import uuid
 from sqlalchemy import text
 from sqlalchemy.sql import case
 from functools import wraps
+import warnings
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+# Helper function to format timestamps with timezone
+def format_timestamp_with_tz(dt):
+    """Format datetime object to ISO format with UTC timezone indicator"""
+    if dt is None:
+        return None
+    # Ensure the datetime is timezone-aware (assume UTC if naive)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
 
 app = Flask(__name__)
 config_obj = Config()
@@ -188,117 +199,10 @@ if not setup_database():
 
 # Configure Flask-SocketIO - use default threading mode
 from flask_socketio import SocketIO, emit, join_room, leave_room
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 db = SQLAlchemy(app)
 
-# SocketIO event handlers for real-time chat
-@socketio.on('join_room')
-def handle_join_room(data):
-    room = f"ticket_{data['ticket_id']}"
-    join_room(room)
-
-@socketio.on('leave_room')
-def handle_leave_room(data):
-    room = f"ticket_{data['ticket_id']}"
-    leave_room(room)
-
-@socketio.on('send_message')
-def handle_send_message(data):
-    ticket_id = data.get('ticket_id')
-    content = data.get('content')
-    is_admin = data.get('is_admin', False)
-    sender_id = getattr(current_user, 'UserID', None)
-    # Save message to database
-    msg = Message(TicketID=ticket_id, SenderID=sender_id,
-                  Content=content, IsAdminReply=is_admin)
-    db.session.add(msg)
-    # Update ticket status and timestamp
-    ticket = Ticket.query.get(ticket_id)
-    if ticket:
-        ticket.UpdatedAt = datetime.utcnow()
-        if not is_admin and ticket.Status == 'open':
-            ticket.Status = 'in_progress'
-    db.session.commit()
-    # Handle attachments if present
-    attachments_info = []
-    if data.get('attachments'):
-        for att in data.get('attachments'):
-            # Link existing Attachment record to this message
-            attachment = Attachment.query.get(att.get('id'))
-            if attachment:
-                attachment.MessageID = msg.MessageID
-                db.session.add(attachment)
-                attachments_info.append({
-                    'id': attachment.AttachmentID,
-                    'original_name': attachment.OriginalName,
-                    'url': url_for('uploaded_file', filename=attachment.StoredName, _external=False),
-                    'file_size': attachment.FileSize,
-                    'mime_type': attachment.MimeType
-                })
-    db.session.commit()
-    # Prepare message payload
-    msg_data = {
-        'ticket_id': ticket_id,
-        'id': msg.MessageID,
-        'content': msg.Content,
-        'is_admin': msg.IsAdminReply,
-        'created_at': msg.CreatedAt.isoformat(),
-        'attachments': attachments_info
-    }
-    # Broadcast to room
-    emit('new_message', msg_data, room=f"ticket_{ticket_id}")
-
-# Flask-Login: user loader
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))
-
-# Enhanced session management
-@app.teardown_appcontext
-def close_db(error):
-    """Close database connections after each request"""
-    try:
-        db.session.remove()
-    except Exception as e:
-        logger.error(f"Error closing database session: {str(e)}")
-
-@app.teardown_request
-def close_db_session(exception):
-    """Ensure database session is properly closed"""
-    try:
-        if exception:
-            db.session.rollback()
-        db.session.close()
-    except Exception as e:
-        logger.error(f"Error in teardown_request: {str(e)}")
-
-# Database health check function
-def check_database_health():
-    """Check if database is accessible and working"""
-    try:
-        db.session.execute(text('SELECT 1'))
-        db.session.commit()
-        return True, "Database connection healthy"
-    except Exception as e:
-        error_msg = f"Database health check failed: {str(e)}"
-        logger.error(error_msg)
-        return False, error_msg
-
-# File upload configuration
-UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads')
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'}
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
-
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
-
-# Ensure upload directory exists
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-# Database Models
+# Database Models - Define all models before using them
 class User(UserMixin, db.Model):
     __tablename__ = 'Users'
     UserID = db.Column(db.Integer, primary_key=True)
@@ -380,7 +284,7 @@ class CommonQuery(db.Model):
     Question = db.Column(db.String(255), nullable=False)
     Solution = db.Column(db.Text, nullable=False)
     CreatedAt = db.Column(db.DateTime, default=datetime.utcnow)
-    UpdatedAt = db.Column(db.DateTime, default=datetime.utcnow)
+    UpdatedAt = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 class Feedback(db.Model):
     __tablename__ = 'Feedback'
@@ -399,6 +303,173 @@ class Attachment(db.Model):
     FileSize = db.Column(db.Integer, nullable=False)
     MimeType = db.Column(db.String(100), nullable=False)
     CreatedAt = db.Column(db.DateTime, default=datetime.utcnow)
+
+# FAQ Models for independent FAQ management system
+class FAQCategory(db.Model):
+    __tablename__ = 'faq_categories'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.String(500), nullable=True)
+    icon = db.Column(db.String(50), default='question-circle')
+    color = db.Column(db.String(20), default='#007bff')
+    sort_order = db.Column(db.Integer, default=0)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class FAQ(db.Model):
+    __tablename__ = 'faqs'
+    id = db.Column(db.Integer, primary_key=True)
+    category_id = db.Column(db.Integer, db.ForeignKey('faq_categories.id'), nullable=False)
+    question = db.Column(db.Text, nullable=False)
+    answer = db.Column(db.Text, nullable=False)
+    language_code = db.Column(db.String(5), default='en')
+    tags = db.Column(db.String(500), nullable=True)
+    status = db.Column(db.String(20), default='published')  # draft, published, archived
+    created_by = db.Column(db.Integer, db.ForeignKey('Users.UserID'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    deleted_at = db.Column(db.DateTime, nullable=True)
+    
+    # Relationships
+    category = db.relationship('FAQCategory', backref=db.backref('faqs', lazy=True))
+    creator = db.relationship('User', backref=db.backref('created_faqs', lazy=True))
+    
+    @property
+    def is_active(self):
+        """Helper property to check if FAQ is active (published and not deleted)"""
+        return self.status == 'published' and self.deleted_at is None
+
+class Workflow(db.Model):
+    __tablename__ = 'workflows'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    config = db.Column(db.Text, nullable=False)  # JSON configuration
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class WorkflowStep(db.Model):
+    __tablename__ = 'workflow_steps'
+    id = db.Column(db.Integer, primary_key=True)
+    workflow_id = db.Column(db.Integer, db.ForeignKey('workflows.id'), nullable=False)
+    step_type = db.Column(db.String(50), nullable=False)  # condition, action, response
+    config = db.Column(db.Text, nullable=False)  # JSON configuration
+    sort_order = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationship
+    workflow = db.relationship('Workflow', backref=db.backref('steps', lazy=True))
+
+# User loader for Flask-Login
+@login_manager.user_loader
+def load_user(user_id):
+    try:
+        return User.query.get(int(user_id))
+    except:
+        return None
+
+# SocketIO event handlers for real-time chat
+@socketio.on('join_room')
+def handle_join_room(data):
+    room = f"ticket_{data['ticket_id']}"
+    join_room(room)
+
+@socketio.on('leave_room')
+def handle_leave_room(data):
+    room = f"ticket_{data['ticket_id']}"
+    leave_room(room)
+
+@socketio.on('send_message')
+def handle_send_message(data):
+    ticket_id = data.get('ticket_id')
+    content = data.get('content')
+    is_admin = data.get('is_admin', False)
+    sender_id = getattr(current_user, 'UserID', None)
+    # Save message to database
+    msg = Message(TicketID=ticket_id, SenderID=sender_id,
+                  Content=content, IsAdminReply=is_admin)
+    db.session.add(msg)
+    # Update ticket status and timestamp
+    ticket = Ticket.query.get(ticket_id)
+    if ticket:
+        ticket.UpdatedAt = datetime.utcnow()
+        if not is_admin and ticket.Status == 'open':
+            ticket.Status = 'in_progress'
+    db.session.commit()
+    # Handle attachments if present
+    attachments_info = []
+    if data.get('attachments'):
+        for att in data.get('attachments'):
+            # Link existing Attachment record to this message
+            attachment = Attachment.query.get(att.get('id'))
+            if attachment:
+                attachment.MessageID = msg.MessageID
+                db.session.add(attachment)
+                attachments_info.append({
+                    'id': attachment.AttachmentID,
+                    'original_name': attachment.OriginalName,
+                    'url': url_for('uploaded_file', filename=attachment.StoredName, _external=False),
+                    'file_size': attachment.FileSize,
+                    'mime_type': attachment.MimeType
+                })
+    db.session.commit()
+    # Prepare message payload
+    msg_data = {
+        'ticket_id': ticket_id,        'id': msg.MessageID,
+        'content': msg.Content,
+        'is_admin': msg.IsAdminReply,
+        'created_at': format_timestamp_with_tz(msg.CreatedAt),
+        'attachments': attachments_info
+    }
+    # Broadcast to room
+    emit('new_message', msg_data, room=f"ticket_{ticket_id}")
+
+# Enhanced session management
+@app.teardown_appcontext
+def close_db(error):
+    """Close database connections after each request"""
+    try:
+        db.session.remove()
+    except Exception as e:
+        logger.error(f"Error closing database session: {str(e)}")
+
+@app.teardown_request
+def close_db_session(exception):
+    """Ensure database session is properly closed"""
+    try:
+        if exception:
+            db.session.rollback()
+        db.session.close()
+    except Exception as e:
+        logger.error(f"Error in teardown_request: {str(e)}")
+
+# Database health check function
+def check_database_health():
+    """Check if database is accessible and working"""
+    try:
+        db.session.execute(text('SELECT 1'))
+        db.session.commit()
+        return True, "Database connection healthy"
+    except Exception as e:
+        error_msg = f"Database health check failed: {str(e)}"
+        logger.error(error_msg)
+        return False, error_msg
+
+# File upload configuration
+UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads')
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'}
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
+
+# Ensure upload directory exists
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # Register authentication blueprint after models are defined
 from auth import auth_bp
@@ -676,7 +747,7 @@ def create_ticket():
             return jsonify({
                 'status': 'error',
                 'message': 'No data provided'
-            }), 400
+            }, 400)
         
         # Validate required fields
         if not data.get('message'):
@@ -684,7 +755,7 @@ def create_ticket():
             return jsonify({
                 'status': 'error',
                 'message': 'Message is required'
-            }), 400
+            }, 400)
         
         # Handle authenticated user vs guest user
         user = None
@@ -717,7 +788,7 @@ def create_ticket():
                     return jsonify({
                         'status': 'error',
                         'message': 'Error creating user'
-                    }), 500
+                    }, 500)
         
         # Get category ID - default to 1 if not provided
         category_id = data.get('category_id', 1)
@@ -747,7 +818,8 @@ def create_ticket():
                 'status': 'error',
                 'message': 'Error creating ticket'
             }), 500
-          # Create initial message
+
+        # Create initial message
         try:
             message = Message(
                 TicketID=ticket.TicketID,
@@ -782,7 +854,7 @@ def create_ticket():
         return jsonify({
             'status': 'error',
             'message': 'Internal server error'
-        }), 500
+        }, 500)
 
 @app.route('/api/tickets/<int:ticket_id>/messages', methods=['GET', 'POST'])
 def handle_messages(ticket_id):
@@ -795,10 +867,9 @@ def handle_messages(ticket_id):
             attachments = Attachment.query.filter_by(MessageID=m.MessageID).all()
             
             message_data = {
-                'id': m.MessageID,
-                'content': m.Content,
+                'id': m.MessageID,                'content': m.Content,
                 'is_admin': m.IsAdminReply,
-                'created_at': m.CreatedAt.isoformat(),
+                'created_at': format_timestamp_with_tz(m.CreatedAt),
                 'attachments': [{
                     'id': att.AttachmentID,
                     'original_name': att.OriginalName,
@@ -978,7 +1049,7 @@ def add_message_with_attachment(ticket_id):
             if is_admin and ticket.Status == 'open':
                 ticket.Status = 'in_progress'
         
-        db.session.commit()
+        db.session.commit();
         
         return jsonify({
             'status': 'success',
@@ -1072,8 +1143,7 @@ def get_recent_activity():
         recent_tickets = db.session.query(Ticket, User, Category).join(
             User, Ticket.UserID == User.UserID, isouter=True
         ).join(
-            Category, Ticket.CategoryID == Category.CategoryID
-        ).order_by(Ticket.CreatedAt.desc()).limit(10).all()
+            Category, Ticket.CategoryID == Category.CategoryID        ).order_by(Ticket.CreatedAt.desc()).limit(10).all()
         
         activities = []
         for ticket, user, category in recent_tickets:
@@ -1081,7 +1151,7 @@ def get_recent_activity():
                 'icon': 'fas fa-ticket-alt',
                 'title': f'New ticket #{ticket.TicketID}',
                 'description': f'{category.Name} - {user.Name if user else "Anonymous"}',
-                'created_at': ticket.CreatedAt.isoformat()
+                'created_at': format_timestamp_with_tz(ticket.CreatedAt)
             })
         
         return jsonify(activities)
@@ -1141,8 +1211,7 @@ def get_admin_tickets():
                     (Ticket.Priority == 'low', 1),
                     else_=2
                 ).desc(),
-                Ticket.CreatedAt.desc()
-            ).all()
+                Ticket.CreatedAt.desc()            ).all()
             
             logger.info(f"Found {len(tickets)} tickets in database")
             
@@ -1157,8 +1226,8 @@ def get_admin_tickets():
                     'organization': user.OrganizationName if user else ticket.OrganizationName or 'Unknown Organization',
                     'priority': ticket.Priority or 'medium',
                     'status': ticket.Status,
-                    'created_at': ticket.CreatedAt.isoformat(),
-                    'updated_at': ticket.UpdatedAt.isoformat() if ticket.UpdatedAt else ticket.CreatedAt.isoformat()
+                    'created_at': format_timestamp_with_tz(ticket.CreatedAt),
+                    'updated_at': format_timestamp_with_tz(ticket.UpdatedAt) if ticket.UpdatedAt else format_timestamp_with_tz(ticket.CreatedAt)
                 }
                 result.append(ticket_data)
                 logger.info(f"Processed ticket {ticket.TicketID}: {ticket.Subject} - Priority: {ticket.Priority}, Org: {ticket_data['organization']}")
@@ -1184,9 +1253,8 @@ def get_admin_tickets():
                         'user_email': 'Unknown',
                         'organization': ticket.OrganizationName or 'Unknown Organization',
                         'priority': ticket.Priority or 'medium',
-                        'status': ticket.Status,
-                        'created_at': ticket.CreatedAt.isoformat(),
-                        'updated_at': ticket.UpdatedAt.isoformat() if ticket.UpdatedAt else ticket.CreatedAt.isoformat()
+                        'status': ticket.Status,                        'created_at': format_timestamp_with_tz(ticket.CreatedAt),
+                        'updated_at': format_timestamp_with_tz(ticket.UpdatedAt) if ticket.UpdatedAt else format_timestamp_with_tz(ticket.CreatedAt)
                     })
                 
                 return jsonify(result)
@@ -1232,7 +1300,7 @@ def get_admin_ticket_details(ticket_id):
             message_data = {
                 'content': msg.Content,
                 'is_admin': msg.IsAdminReply,
-                'created_at': msg.CreatedAt.isoformat(),
+                'created_at': format_timestamp_with_tz(msg.CreatedAt),
                 'attachments': [{
                     'id': att.AttachmentID,
                     'original_name': att.OriginalName,
@@ -1255,10 +1323,9 @@ def get_admin_ticket_details(ticket_id):
             'id': ticket_obj.TicketID,
             'subject': ticket_obj.Subject,
             'category': category.Name,
-            'user_name': user.Name if user else None,
-            'user_email': user.Email if user else None,
+            'user_name': user.Name if user else None,            'user_email': user.Email if user else None,
             'status': ticket_obj.Status,
-            'created_at': ticket_obj.CreatedAt.isoformat(),
+            'created_at': format_timestamp_with_tz(ticket_obj.CreatedAt),
             'messages': message_list
         }
         
@@ -1291,9 +1358,8 @@ def get_active_conversations():
                 'id': ticket.TicketID,
                 'subject': ticket.Subject,
                 'user_name': user.Name if user else None,
-                'category': category.Name,
-                'status': ticket.Status,
-                'last_message_at': last_message.CreatedAt.isoformat() if last_message else ticket.CreatedAt.isoformat(),
+                'category': category.Name,                'status': ticket.Status,
+                'last_message_at': format_timestamp_with_tz(last_message.CreatedAt) if last_message else format_timestamp_with_tz(ticket.CreatedAt),
                 'unread_count': min(unread_count, 5)  # Cap at 5 for display
             })
         
@@ -1370,7 +1436,7 @@ def get_analytics():
     try:
         # Category distribution
         category_stats = db.session.query(Category.Name, db.func.count(Ticket.TicketID)).join(
-            Ticket, Category.CategoryID == Ticket.CategoryID
+            Ticket, Category.CategoryID == Ticket.TicketID
         ).group_by(Category.Name).all()
         
         category_data = {
@@ -1442,22 +1508,21 @@ def health_check():
             return jsonify({
                 "status": "healthy",
                 "database": "connected",
-                "message": health_message,
-                "timestamp": datetime.utcnow().isoformat()
+                "message": health_message,                "timestamp": format_timestamp_with_tz(datetime.utcnow())
             }), 200
         else:
             return jsonify({
                 "status": "unhealthy",
                 "database": "disconnected",
                 "error": health_message,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": format_timestamp_with_tz(datetime.utcnow())
             }), 503
             
     except Exception as e:
         return jsonify({
             "status": "error",
             "error": str(e),
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": format_timestamp_with_tz(datetime.utcnow())
         }), 500
 
 @app.route('/api/database/test', methods=['GET'])
@@ -1517,7 +1582,7 @@ def get_ticket_details(ticket_id):
             message_data = {
                 'content': msg.Content,
                 'is_admin': msg.IsAdminReply,
-                'created_at': msg.CreatedAt.isoformat(),
+                'created_at': format_timestamp_with_tz(msg.CreatedAt),
                 'attachments': [{
                     'id': att.AttachmentID,
                     'original_name': att.OriginalName,
@@ -1534,9 +1599,8 @@ def get_ticket_details(ticket_id):
             'status': ticket.Status,
             'category': category.Name if category else 'Unknown',
             'user_name': user.Name if user else 'Anonymous',
-            'user_email': user.Email if user else 'No email',
-            'created_at': ticket.CreatedAt.isoformat(),
-            'updated_at': ticket.UpdatedAt.isoformat(),
+            'user_email': user.Email if user else 'No email',            'created_at': format_timestamp_with_tz(ticket.CreatedAt),
+            'updated_at': format_timestamp_with_tz(ticket.UpdatedAt),
             'messages': message_list
         }
         
@@ -1547,149 +1611,328 @@ def get_ticket_details(ticket_id):
         logger.error(f"Error getting ticket details: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
-# User profile routes
-@app.route('/profile')
-def user_profile():
-    """User profile page"""
-    return render_template('profile.html')
-
-@app.route('/api/user/stats', methods=['GET'])
-@login_required
-def get_user_stats():
-    """Get user ticket statistics"""
+# FAQ Management API Endpoints
+@app.route('/api/faq-categories', methods=['GET'])
+@admin_required
+def get_faq_categories():
+    """Get all FAQ categories"""
     try:
-        user_id = current_user.UserID
-        
-        # Get ticket counts
-        total_tickets = Ticket.query.filter_by(UserID=user_id).count()
-        open_tickets = Ticket.query.filter_by(UserID=user_id, Status='open').count()
-        in_progress_tickets = Ticket.query.filter_by(UserID=user_id, Status='in_progress').count()
-        resolved_tickets = Ticket.query.filter_by(UserID=user_id, Status='resolved').count()
-        closed_tickets = Ticket.query.filter_by(UserID=user_id, Status='closed').count()
-        
-        # Calculate average resolution time (simplified)
-        resolved_ticket_objects = Ticket.query.filter_by(UserID=user_id, Status='resolved').all()
-        avg_resolution = None
-        if resolved_ticket_objects:
-            total_hours = sum([
-                (ticket.UpdatedAt - ticket.CreatedAt).total_seconds() / 3600 
-                for ticket in resolved_ticket_objects if ticket.UpdatedAt
-            ])
-            avg_resolution = f"{int(total_hours / len(resolved_ticket_objects))}h"
-        
-        return jsonify({
-            'total': total_tickets,
-            'open': open_tickets + in_progress_tickets,  # Combine open and in_progress
-            'resolved': resolved_tickets + closed_tickets,  # Combine resolved and closed
-            'avgResolution': avg_resolution
-        })
-        
+        categories = FAQCategory.query.filter_by(is_active=True).order_by(FAQCategory.sort_order, FAQCategory.name).all()
+        return jsonify([{
+            'id': cat.id,
+            'name': cat.name,
+            'description': cat.description,
+            'icon': cat.icon,
+            'color': cat.color,
+            'sort_order': cat.sort_order,
+            'faq_count': len(cat.faqs) if cat.faqs else 0
+        } for cat in categories])
     except Exception as e:
-        logger.error(f"Error getting user stats: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error fetching FAQ categories: {e}")
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/api/user/tickets', methods=['GET'])
-@login_required
-def get_user_tickets():
-    """Get user's tickets"""
-    try:
-        user_id = current_user.UserID
-        limit = request.args.get('limit', 20, type=int)
-        
-        tickets = db.session.query(Ticket, Category).join(
-            Category, Ticket.CategoryID == Category.CategoryID
-        ).filter(Ticket.UserID == user_id).order_by(Ticket.CreatedAt.desc()).limit(limit).all()
-        
-        result = []
-        for ticket, category in tickets:
-            ticket_data = {
-                'id': ticket.TicketID,
-                'subject': ticket.Subject,
-                'category': category.Name,
-                'priority': ticket.Priority,
-                'status': ticket.Status,
-                'created_at': ticket.CreatedAt.isoformat(),
-                'updated_at': ticket.UpdatedAt.isoformat()
-            }
-            result.append(ticket_data)
-        
-        return jsonify(result)
-        
-    except Exception as e:
-        logger.error(f"Error getting user tickets: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/user/profile', methods=['PUT'])
-@login_required
-def update_user_profile():
-    """Update user profile"""
+@app.route('/api/faq-categories', methods=['POST'])
+@admin_required
+def create_faq_category():
+    """Create a new FAQ category"""
     try:
         data = request.json
-        user = current_user
+        name = data.get('name', '').strip()
+        description = data.get('description', '').strip()
+        icon = data.get('icon', 'fas fa-question-circle')
+        color = data.get('color', '#007bff')
         
-        # Update user fields
-        if 'name' in data:
-            user.Name = data['name']
-        if 'position' in data:
-            user.Position = data['position']
-        if 'department' in data:
-            user.Department = data['department']
-        if 'phone' in data:
-            user.Phone = data['phone']
-        if 'priority' in data and data['priority'] in ['low', 'medium', 'high', 'critical']:
-            user.PriorityLevel = data['priority']
-        if 'language' in data:
-            user.PreferredLanguage = data['language']
+        if not name:
+            return jsonify({"error": "Category name is required"}), 400
+        
+        # Check for duplicate names
+        existing = FAQCategory.query.filter_by(name=name, is_active=True).first()
+        if existing:
+            return jsonify({"error": "Category name already exists"}), 400
+        
+        # Get next sort order
+        max_order = db.session.query(db.func.max(FAQCategory.sort_order)).scalar() or 0
+        
+        category = FAQCategory(
+            name=name,
+            description=description if description else None,
+            icon=icon,
+            color=color,
+            sort_order=max_order + 1
+        )
+        
+        db.session.add(category)
+        db.session.commit()
+        
+        return jsonify({
+            'id': category.id,
+            'name': category.name,
+            'description': category.description,
+            'icon': category.icon,
+            'color': category.color,
+            'sort_order': category.sort_order
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error creating FAQ category: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/faq-categories/<int:category_id>', methods=['PUT'])
+@admin_required
+def update_faq_category(category_id):
+    """Update an existing FAQ category"""
+    try:
+        category = FAQCategory.query.get_or_404(category_id)
+        data = request.json
+        
+        name = data.get('name', '').strip()
+        if not name:
+            return jsonify({"error": "Category name is required"}), 400
+        
+        # Check for duplicate names (excluding current category)
+        existing = FAQCategory.query.filter(
+            FAQCategory.name == name,
+            FAQCategory.is_active == True,
+            FAQCategory.id != category_id
+        ).first()
+        if existing:
+            return jsonify({"error": "Category name already exists"}), 400
+        
+        category.name = name
+        category.description = data.get('description', '').strip() or None
+        category.icon = data.get('icon', category.icon)
+        category.color = data.get('color', category.color)
+        category.updated_at = datetime.utcnow()
         
         db.session.commit()
         
         return jsonify({
-            'status': 'success',
-            'message': 'Profile updated successfully'
+            'id': category.id,
+            'name': category.name,
+            'description': category.description,
+            'icon': category.icon,
+            'color': category.color,
+            'sort_order': category.sort_order
+        })
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error updating FAQ category: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/faq-categories/<int:category_id>', methods=['DELETE'])
+@admin_required
+def delete_faq_category(category_id):
+    """Delete an FAQ category"""
+    try:
+        category = FAQCategory.query.get_or_404(category_id)
+        
+        # Check if category has FAQs
+        faq_count = FAQ.query.filter_by(category_id=category_id, is_active=True).count()
+        if faq_count > 0:
+            return jsonify({"error": f"Cannot delete category with {faq_count} active FAQs"}), 400
+        
+        # Soft delete
+        category.is_active = False
+        category.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        return jsonify({"message": "Category deleted successfully"})
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error deleting FAQ category: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/faqs', methods=['GET'])
+@admin_required
+def get_faqs():
+    """Get FAQs with optional category filter"""
+    try:
+        category_id = request.args.get('category_id', type=int)
+        
+        # Filter by published status and not deleted
+        query = FAQ.query.filter_by(status='published').filter(FAQ.deleted_at.is_(None))
+        if category_id:
+            query = query.filter_by(category_id=category_id)
+        
+        faqs = query.order_by(FAQ.created_at.desc()).all()
+        
+        return jsonify([{
+            'id': faq.id,
+            'category_id': faq.category_id,
+            'category_name': faq.category.name if faq.category else 'Unknown',
+            'question': faq.question,
+            'answer': faq.answer,
+            'language': faq.language_code,            'status': faq.status,
+            'tags': faq.tags,
+            'created_at': format_timestamp_with_tz(faq.created_at) if faq.created_at else None
+        } for faq in faqs])
+    except Exception as e:
+        logger.error(f"Error fetching FAQs: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/faqs', methods=['POST'])
+@admin_required
+def create_faq():
+    """Create a new FAQ"""
+    try:
+        data = request.json
+        category_id = data.get('category_id')
+        question = data.get('question', '').strip()
+        answer = data.get('answer', '').strip()
+        language = data.get('language', 'en')
+        tags = data.get('tags', '').strip()
+        
+        if not all([category_id, question, answer]):
+            return jsonify({"error": "Category ID, question, and answer are required"}), 400
+        
+        # Verify category exists
+        category = FAQCategory.query.filter_by(id=category_id, is_active=True).first()
+        if not category:
+            return jsonify({"error": "Invalid category ID"}), 400
+        
+        faq = FAQ(
+            category_id=category_id,
+            question=question,
+            answer=answer,
+            language_code=language,
+            tags=tags,
+            status='published',
+            created_by=getattr(current_user, 'UserID', None)
+        )
+        
+        db.session.add(faq)
+        db.session.commit()
+        
+        return jsonify({
+            'id': faq.id,
+            'category_id': faq.category_id,
+            'category_name': category.name,            'question': faq.question,
+            'answer': faq.answer,
+            'language': faq.language_code,            'tags': faq.tags,
+            'status': faq.status,
+            'created_at': format_timestamp_with_tz(faq.created_at) if faq.created_at else None
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error creating FAQ: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/faqs/<int:faq_id>', methods=['PUT'])
+@admin_required
+def update_faq(faq_id):
+    """Update an existing FAQ"""
+    try:
+        faq = FAQ.query.get_or_404(faq_id)
+        data = request.json
+        
+        category_id = data.get('category_id')
+        question = data.get('question', '').strip()
+        answer = data.get('answer', '').strip()
+        
+        if not all([category_id, question, answer]):
+            return jsonify({"error": "Category ID, question, and answer are required"}), 400
+        
+        # Verify category exists
+        category = FAQCategory.query.filter_by(id=category_id, is_active=True).first()
+        if not category:
+            return jsonify({"error": "Invalid category ID"}), 400
+        
+        faq.category_id = category_id
+        faq.question = question
+        faq.answer = answer
+        faq.language = data.get('language', faq.language)
+        faq.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        return jsonify({
+            'id': faq.id,
+            'category_id': faq.category_id,
+            'category_name': category.name,
+            'question': faq.question,
+            'answer': faq.answer,
+            'language': faq.language,
+            'sort_order': faq.sort_order
+        })
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error updating FAQ: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/faqs/<int:faq_id>', methods=['DELETE'])
+@admin_required
+def delete_faq(faq_id):
+    """Delete an FAQ"""
+    try:
+        faq = FAQ.query.get_or_404(faq_id)
+        
+        # Soft delete        faq.is_active = False
+        faq.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        return jsonify({"message": "FAQ deleted successfully"})
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error deleting FAQ: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/admin/tickets/<int:ticket_id>', methods=['DELETE'])
+@admin_required
+def delete_ticket(ticket_id):
+    """Delete a ticket and all associated data"""
+    try:
+        logger.info(f"Admin attempting to delete ticket {ticket_id}")
+        
+        # Find the ticket
+        ticket = Ticket.query.get(ticket_id)
+        if not ticket:
+            return jsonify({"error": "Ticket not found"}), 404
+        
+        # Get all messages for this ticket to delete their attachments
+        messages = Message.query.filter_by(TicketID=ticket_id).all()
+        
+        # Delete attachments from filesystem and database
+        for message in messages:
+            attachments = Attachment.query.filter_by(MessageID=message.MessageID).all()
+            for attachment in attachments:
+                # Try to delete file from filesystem
+                try:
+                    import os
+                    if attachment.StoredName:
+                        file_path = os.path.join('static/uploads', attachment.StoredName)
+                        if os.path.exists(file_path):
+                            os.remove(file_path)
+                            logger.info(f"Deleted attachment file: {file_path}")
+                except Exception as file_error:
+                    logger.warning(f"Could not delete attachment file {attachment.StoredName}: {file_error}")
+                
+                # Delete attachment record
+                db.session.delete(attachment)
+        
+        # Delete all messages for this ticket
+        Message.query.filter_by(TicketID=ticket_id).delete()
+        
+        # Delete the ticket
+        db.session.delete(ticket)
+        db.session.commit()
+        
+        logger.info(f"Successfully deleted ticket {ticket_id} and all associated data")
+        return jsonify({
+            "status": "success",
+            "message": f"Ticket #{ticket_id} deleted successfully"
         })
         
     except Exception as e:
-        logger.error(f"Error updating user profile: {str(e)}")
+        logger.error(f"Error deleting ticket {ticket_id}: {str(e)}", exc_info=True)
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
-if __name__ == '__main__':
-    import socket
-    
+if __name__ == "__main__":
     try:
-        # Test database connection
-        with app.app_context():
-            db.create_all()
-            print("Database connection successful!")
+        db.create_all()
+        logger.info("Database tables created successfully")
+        socketio.run(app, host="0.0.0.0", port=5000, debug=True)
     except Exception as e:
-        print("Error connecting to database:", str(e))
-        print("Please check your database connection settings in .env file")
-    
-    # Try to find an available port
-    def find_free_port():
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind(('', 0))
-            s.listen(1)
-            port = s.getsockname()[1]
-        return port
-    
-    # Use port 5001 or find an alternative
-    try:
-        port = 5001
-        print(f"Starting application on port {port}...")
-        print(f"Access the application at: http://127.0.0.1:{port}")
-        print(f"Admin panel: http://127.0.0.1:{port}/admin")
-        print(f"Admin login: admin@supportcenter.com / admin123")
-        print("Press Ctrl+C to stop the server")
-        
-        # Run with SocketIO for real-time support
-        socketio.run(app, debug=app.config['DEBUG'], port=port, host='127.0.0.1')
-    except OSError as e:
-        if "address already in use" in str(e).lower() or "10048" in str(e):
-            print(f"Port {port} is already in use. Finding alternative port...")
-            port = find_free_port()
-            print(f"Using port {port} instead...")
-            print(f"Access the application at: http://127.0.0.1:{port}")
-            socketio.run(app, debug=app.config['DEBUG'], port=port, host='127.0.0.1')
-        else:
-            raise
+        logger.error(f"Failed to start application: {e}")
+        print(f"Error starting application: {e}")

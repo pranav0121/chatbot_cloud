@@ -657,3 +657,38 @@ body {
 .ticket-info p {
     margin-bottom: 8px;
 }
+
+/* Delete button styling */
+.btn-outline-danger {
+    border-color: #dc3545;
+    color: #dc3545;
+}
+
+.btn-outline-danger:hover {
+    background-color: #dc3545;
+    border-color: #dc3545;
+    color: white;
+}
+
+.btn-outline-danger:focus {
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+}
+
+/* Action buttons spacing */
+.table td button {
+    margin-right: 4px;
+}
+
+.table td button:last-child {
+    margin-right: 0;
+}
+
+/* Confirmation dialog styling */
+.swal2-popup {
+    border-radius: 10px;
+}
+
+/* Delete button in modal */
+#delete-ticket-btn {
+    margin-right: auto;
+}

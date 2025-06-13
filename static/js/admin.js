@@ -240,11 +240,14 @@ async function loadTickets() {
                 <td><span class="status-badge status-${ticket.status}">${ticket.status.replace('_', ' ')}</span></td>
                 <td>${formatTime(ticket.created_at)}</td>
                 <td>
-                    <button class="btn btn-sm btn-outline-primary me-1" onclick="viewTicket(${ticket.id})">
+                    <button class="btn btn-sm btn-outline-primary me-1" onclick="viewTicket(${ticket.id})" title="View Details">
                         <i class="fas fa-eye"></i>
                     </button>
-                    <button class="btn btn-sm btn-outline-success" onclick="startChat(${ticket.id})">
+                    <button class="btn btn-sm btn-outline-success me-1" onclick="startChat(${ticket.id})" title="Start Chat">
                         <i class="fas fa-comments"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteTicket(${ticket.id})" title="Delete Ticket">
+                        <i class="fas fa-trash"></i>
                     </button>
                 </td>
             </tr>
@@ -691,12 +694,53 @@ function createResolutionChart(data) {
 function formatTime(dateString) {
     const date = new Date(dateString);
     const now = new Date();
-    const diff = now - date;
 
+    // Check if the date is valid
+    if (isNaN(date.getTime())) {
+        return 'Invalid date';
+    }
+
+    // If the date string doesn't include timezone info, assume it's UTC
+    const adjustedDate = dateString.includes('Z') || dateString.includes('+') || dateString.includes('-')
+        ? date
+        : new Date(dateString + 'Z'); // Add 'Z' to indicate UTC if no timezone info
+
+    const diff = now - adjustedDate;
+
+    // Handle future dates (shouldn't happen, but just in case)
+    if (diff < 0) {
+        return 'Just now';
+    }
+
+    // Less than 1 minute
     if (diff < 60000) return 'Just now';
-    if (diff < 3600000) return `${Math.floor(diff / 60000)} min ago`;
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)} hours ago`;
-    return date.toLocaleDateString();
+
+    // Less than 1 hour
+    if (diff < 3600000) {
+        const minutes = Math.floor(diff / 60000);
+        return `${minutes} min${minutes === 1 ? '' : 's'} ago`;
+    }
+
+    // Less than 24 hours
+    if (diff < 86400000) {
+        const hours = Math.floor(diff / 3600000);
+        return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+    }
+
+    // Less than 7 days
+    if (diff < 604800000) {
+        const days = Math.floor(diff / 86400000);
+        return `${days} day${days === 1 ? '' : 's'} ago`;
+    }
+
+    // More than 7 days, show actual date
+    return adjustedDate.toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
 }
 
 function showNotification(message, type = 'info') {
@@ -875,4 +919,80 @@ function testImageUrl(url) {
 
     // Also try to open in new tab for manual verification
     window.open(url, '_blank');
+}
+
+async function deleteTicket(ticketId) {
+    // Show confirmation dialog
+    const ticketElement = document.querySelector(`button[onclick="deleteTicket(${ticketId})"]`).closest('tr');
+    const ticketSubject = ticketElement?.cells[1]?.textContent || `#${ticketId}`;
+
+    const confirmed = confirm(
+        `Are you sure you want to delete ticket ${ticketSubject}?\n\n` +
+        'This action will permanently delete:\n' +
+        '• The ticket and all its messages\n' +
+        '• All file attachments\n' +
+        '• All associated data\n\n' +
+        'This action cannot be undone!'
+    );
+
+    if (!confirmed) return;
+
+    try {
+        console.log(`Deleting ticket ${ticketId}...`);
+        showNotification(`Deleting ticket #${ticketId}...`, 'info');
+
+        const response = await fetch(`/api/admin/tickets/${ticketId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+
+            // Refresh data
+            await loadTickets();
+            await loadActiveConversations();
+            await loadDashboardData();
+
+            // Show success message
+            showNotification(`Ticket #${ticketId} deleted successfully`, 'success');
+
+            // If we were viewing this ticket, close the modal
+            if (currentTicketId === ticketId) {
+                const ticketModal = document.getElementById('ticketModal');
+                if (ticketModal && bootstrap.Modal.getInstance(ticketModal)) {
+                    bootstrap.Modal.getInstance(ticketModal).hide();
+                }
+                currentTicketId = null;
+            }
+
+            console.log(`Ticket ${ticketId} deleted successfully`);
+        } else {
+            const error = await response.json();
+            showNotification(`Error: ${error.error || 'Failed to delete ticket'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting ticket:', error);
+        showNotification('Error deleting ticket', 'error');
+    }
+}
+
+async function deleteCurrentTicket() {
+    if (!currentTicketId) {
+        showNotification('No ticket selected', 'error');
+        return;
+    }
+
+    // Close the modal first
+    const modal = bootstrap.Modal.getInstance(document.getElementById('ticketModal'));
+    if (modal) {
+        modal.hide();
+    }
+
+    // Wait a moment for modal to close, then trigger delete
+    setTimeout(() => {
+        deleteTicket(currentTicketId);
+    }, 300);
 }

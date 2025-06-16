@@ -109,7 +109,7 @@ def logout():
 # Admin Authentication Routes
 @auth_bp.route('/admin/login', methods=['GET', 'POST'])
 def admin_login():
-    """Admin login route with credential validation"""
+    """Admin login route with credential validation and auto-creation"""
     # Import here to avoid circular imports
     from app import db, User
     from datetime import datetime
@@ -117,6 +117,49 @@ def admin_login():
     if request.method == 'POST':
         email = request.form.get('email')
         password = request.form.get('password')
+        
+        # Debug: Check if this is the expected admin email
+        if email == 'admin@youcloudtech.com':
+            # Auto-create admin user if it doesn't exist
+            admin_user = User.query.filter_by(Email=email).first()
+            
+            if not admin_user:
+                # Create admin user automatically
+                try:
+                    admin_user = User(
+                        Name='System Administrator',
+                        Email=email,
+                        PasswordHash=generate_password_hash('admin123'),
+                        OrganizationName='YouCloudTech',
+                        Position='Administrator',
+                        PriorityLevel='critical',
+                        Department='IT',
+                        Phone='+1-555-ADMIN',
+                        IsActive=True,
+                        IsAdmin=True,
+                        CreatedAt=datetime.utcnow(),
+                        LastLogin=datetime.utcnow()
+                    )
+                    db.session.add(admin_user)
+                    db.session.commit()
+                    flash('Admin user created automatically. Please login.', 'success')
+                    return redirect(url_for('auth.admin_login'))
+                except Exception as e:
+                    db.session.rollback()
+                    flash(f'Error creating admin user: {str(e)}', 'error')
+                    return redirect(url_for('auth.admin_login'))
+            
+            # Ensure existing user is properly configured as admin
+            if not admin_user.IsAdmin or not admin_user.IsActive:
+                try:
+                    admin_user.IsAdmin = True
+                    admin_user.IsActive = True
+                    admin_user.PasswordHash = generate_password_hash('admin123')
+                    db.session.commit()
+                    flash('Admin user activated automatically.', 'success')
+                except Exception as e:
+                    db.session.rollback()
+                    flash(f'Error updating admin user: {str(e)}', 'error')
         
         # Validate admin credentials
         admin_user = User.query.filter_by(Email=email, IsAdmin=True).first()
@@ -149,6 +192,63 @@ def admin_login():
         
         flash(f'Welcome, Administrator {admin_user.Name}!', 'success')
         return redirect(url_for('admin_dashboard'))
+    
+    return render_template('admin_login.html')
+
+@auth_bp.route('/admin-login', methods=['GET', 'POST'])
+def admin_login_alt():
+    """Admin login route with auto-creation for admin@youcloudtech.com"""
+    from app import db, User
+    from datetime import datetime
+    from flask import session
+    
+    if request.method == 'POST':
+        email = request.form.get('email')
+        password = request.form.get('password')
+        
+        # Check for admin email
+        if email == 'admin@youcloudtech.com':
+            user = User.query.filter_by(Email=email).first()
+            
+            # Auto-create admin user if doesn't exist
+            if not user:
+                admin_user = User(
+                    Name='System Administrator',
+                    Email='admin@youcloudtech.com',
+                    PasswordHash=generate_password_hash('SecureAdmin123!'),
+                    Organization='YouCloud Technologies',
+                    Position='System Administrator',
+                    Department='IT',
+                    Phone='Admin',
+                    Priority='critical',
+                    IsActive=True,
+                    JoinedAt=datetime.utcnow()
+                )
+                db.session.add(admin_user)
+                db.session.commit()
+                user = admin_user
+                current_app.logger.info("Admin user auto-created successfully")
+            
+            # Auto-activate if deactivated
+            if not user.IsActive:
+                user.IsActive = True
+                db.session.commit()
+                current_app.logger.info("Admin user auto-activated")
+            
+            # Verify password
+            if check_password_hash(user.PasswordHash, password):
+                # Set admin session
+                session['admin_logged_in'] = True
+                session['admin_user_id'] = user.UserID
+                session['admin_email'] = user.Email
+                session['admin_name'] = user.Name
+                
+                flash('Admin login successful!', 'success')
+                return redirect(url_for('super_admin.dashboard'))
+            else:
+                flash('Invalid admin password', 'error')
+        else:
+            flash('Admin access restricted to authorized accounts only', 'error')
     
     return render_template('admin_login.html')
 

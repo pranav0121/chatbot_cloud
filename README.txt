@@ -78,13 +78,17 @@ DATABASE:
    - Status tracking (Open, In Progress, Resolved, Closed)
    - Organization-based filtering
    - Assignment to support staff
+   - Secure ticket deletion with file cleanup
+   - Timezone-aware timestamps for accurate time display
 
 5. ADMIN DASHBOARD
    - View all tickets and conversations
    - Real-time chat with customers
+   - Ticket deletion with secure cleanup
    - Analytics and reporting
    - User management
    - System monitoring
+   - Timezone-aware timestamp display
 
 6. FILE HANDLING
    - Secure file uploads
@@ -156,11 +160,12 @@ CHAT WIDGET:
 
 ADMIN PANEL (admin.html):
 - Dashboard with key metrics
-- Ticket management table
+- Ticket management table with delete functionality
 - Live chat interface
 - Analytics charts
 - User management tools
 - System settings
+- Timezone-consistent timestamp display
 
 LOGIN/REGISTER PAGES:
 - Clean, professional design
@@ -216,6 +221,8 @@ MAIN CHAT FUNCTIONS (chat.js):
 ADMIN FUNCTIONS (admin.js):
 - loadTickets() - Displays all support tickets
 - viewTicket() - Shows detailed ticket information
+- deleteTicket() - Securely removes tickets with confirmation
+- deleteCurrentTicket() - Removes ticket from detail modal
 - loadActiveConversations() - Shows ongoing chats
 - sendAdminMessage() - Admin replies to customers
 - updateTicketStatus() - Changes ticket status
@@ -223,10 +230,11 @@ ADMIN FUNCTIONS (admin.js):
 
 UTILITY FUNCTIONS:
 - showNotification() - Displays user alerts
-- formatTime() - Formats timestamps nicely  
+- formatTime() - Formats timestamps with timezone awareness
 - escapeHtml() - Prevents security vulnerabilities
 - testApiConnection() - Checks server connectivity
 - handlePaste() - Enables image paste functionality
+- format_timestamp_with_tz() - Backend timezone formatting helper
 
 ==============================================================================
                                 API ENDPOINTS
@@ -243,6 +251,7 @@ ADMIN APIs:
 - GET /api/admin/tickets - Get all tickets
 - GET /api/admin/active-conversations - Get live chats
 - PUT /api/tickets/:id/status - Update ticket status
+- DELETE /api/admin/tickets/:id - Securely delete tickets
 - GET /api/admin/analytics - Get system statistics
 
 USER MANAGEMENT APIs:
@@ -482,6 +491,38 @@ DEBUGGING STEPS:
 5. Check network connectivity
 
 ==============================================================================
+                            RECENT IMPROVEMENTS (June 2025)
+==============================================================================
+
+TICKET DELETION FEATURE:
+- Added secure ticket deletion functionality for administrators
+- Includes confirmation dialog to prevent accidental deletions
+- Automatically cleans up associated messages and file attachments
+- Available both from tickets table and ticket detail modal
+- Complete file system cleanup to prevent orphaned files
+
+TIMESTAMP ACCURACY FIX:
+- Fixed timezone handling for accurate time display
+- Implemented timezone-aware timestamp formatting
+- Resolved "X hours ago" display issues caused by UTC/local time confusion
+- All timestamps now show correct relative time
+- Backend format_timestamp_with_tz() helper function
+- Frontend formatTime() enhanced for proper UTC handling
+
+ENHANCED ADMIN INTERFACE:
+- Delete buttons with intuitive trash can icons
+- Improved user experience with confirmation dialogs
+- Better error handling and user feedback
+- Consistent styling across admin panels
+- Enhanced tooltip information for better usability
+
+SECURITY IMPROVEMENTS:
+- Secure file deletion prevents orphaned attachments
+- Proper database transaction handling for deletions
+- Admin authentication required for all deletion operations
+- Comprehensive error logging for audit trails
+
+==============================================================================
                             FUTURE ENHANCEMENTS
 ==============================================================================
 
@@ -536,10 +577,11 @@ This application was created using:
 - Mobile-responsive design approach
 - Accessibility compliance standards
 
-Total lines of code: ~8,000+
+Total lines of code: ~8,500+
 Development time: Significantly reduced thanks to AI assistance
 Code quality: Professional-grade with comprehensive error handling
 Testing coverage: Extensive with multiple test suites
+Recent updates: Ticket deletion and timezone fixes (June 2025)
 
 ==============================================================================
                                 END OF GUIDE

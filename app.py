@@ -175,26 +175,22 @@ def set_language(lang_code):
     
     return redirect(request.referrer or url_for('index'))
 
-# Enhanced database connection with better error handling
+# Enhanced database connection - MSSQL ONLY
 def setup_database():
-    """Setup database connection with comprehensive error handling"""
+    """Setup database connection - MSSQL ONLY, no fallback"""
     try:
         app.config['SQLALCHEMY_DATABASE_URI'] = config_obj.SQLALCHEMY_DATABASE_URI
-        logger.info(f"Database URI configured: {config_obj.SQLALCHEMY_DATABASE_URI}")
+        logger.info(f"Database URI configured for MSSQL: {config_obj.SQLALCHEMY_DATABASE_URI}")
         return True
     except Exception as e:
-        logger.error(f"Failed to configure database URI: {e}")
-        try:
-            app.config['SQLALCHEMY_DATABASE_URI'] = config_obj.SQLALCHEMY_DATABASE_URI_FALLBACK
-            logger.warning("Falling back to SQLite database")
-            return True
-        except Exception as fallback_error:
-            logger.error(f"Even fallback database failed: {fallback_error}")
-            return False
+        logger.error(f"Failed to configure MSSQL database URI: {e}")
+        logger.error("NO FALLBACK - MSSQL ONLY MODE")
+        return False
 
-# Setup database
+# Setup database - MSSQL ONLY
 if not setup_database():
-    logger.critical("Database setup failed completely")
+    logger.critical("MSSQL database setup failed - NO FALLBACK")
+    logger.critical("Please ensure MSSQL Server is running and accessible")
     exit(1)
 
 # Configure Flask-SocketIO - use default threading mode
@@ -254,6 +250,13 @@ class Ticket(db.Model):
     CreatedAt = db.Column(db.DateTime, default=datetime.utcnow)
     UpdatedAt = db.Column(db.DateTime, default=datetime.utcnow)
     
+    # Extended Ticket model fields for enterprise features
+    escalation_level = db.Column(db.Integer, default=0)  # 0=Bot, 1=ICP, 2=YouCloud  
+    current_sla_target = db.Column(db.DateTime, nullable=True)
+    resolution_method = db.Column(db.String(50), nullable=True)  # Bot, ICP, YouCloud
+    bot_attempted = db.Column(db.Boolean, default=False)
+    partner_id = db.Column(db.Integer, nullable=True)  # Will add FK later
+
     # Relationships
     user = db.relationship('User', foreign_keys=[UserID], backref='tickets')
     assigned_admin = db.relationship('User', foreign_keys=[AssignedTo], backref='assigned_tickets')
@@ -275,6 +278,7 @@ class Message(db.Model):
     SenderID = db.Column(db.Integer, db.ForeignKey('Users.UserID'))
     Content = db.Column(db.Text, nullable=False)
     IsAdminReply = db.Column(db.Boolean, default=False)
+    IsBotResponse = db.Column(db.Boolean, default=False)
     CreatedAt = db.Column(db.DateTime, default=datetime.utcnow)
 
 class CommonQuery(db.Model):
@@ -472,21 +476,20 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # Register authentication blueprint after models are defined
-from auth import auth_bp
-app.register_blueprint(auth_bp)
+from auth import auth_bp, admin_required
+app.register_blueprint(auth_bp, url_prefix='/auth')
 
-# Admin authentication helper function
-def admin_required(f):
-    """Decorator to require admin authentication for API endpoints"""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not session.get('admin_logged_in'):
-            return jsonify({
-                'error': 'Admin authentication required',
-                'message': 'Please log in as an administrator to access this resource'
-            }), 401
-        return f(*args, **kwargs)
-    return decorated_function
+# Register Super Admin Portal Blueprint (after all models are defined)
+def register_super_admin_blueprint():
+    from super_admin import super_admin_bp
+    app.register_blueprint(super_admin_bp)
+
+# Enhanced admin route for backwards compatibility
+@app.route('/admin')
+@admin_required
+def admin_dashboard():
+    """Admin dashboard route"""
+    return render_template('admin.html')
 
 # Routes
 @app.route('/test')
@@ -530,6 +533,61 @@ def dashboard():
 @login_required
 def faq():
     return render_template('faq.html')
+
+@app.route('/chat', methods=['POST'])
+def chat():
+    """Handle chat messages and return bot responses"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        message = data.get('message', '').strip()
+        user_id = data.get('user_id', 'anonymous')
+        
+        if not message:
+            return jsonify({'error': 'Message is required'}), 400
+        
+        # Import bot service
+        try:
+            from bot_service import process_message
+            
+            # Process the message with the bot
+            bot_response = process_message(message, user_id)
+            
+            return jsonify({
+                'response': bot_response,
+                'user_id': user_id,
+                'timestamp': datetime.now().isoformat(),
+                'status': 'success'
+            })
+            
+        except ImportError:
+            # Fallback response if bot service is not available
+            fallback_responses = [
+                "Thank you for your message. Our support team will assist you shortly.",
+                "I understand you need help. Let me connect you with a support agent.",
+                "Your request has been received. How can I help you today?",
+                "I'm here to help! Please describe your issue in more detail.",
+                "Thank you for contacting support. What can I assist you with?"
+            ]
+            
+            import random
+            response = random.choice(fallback_responses)
+            
+            return jsonify({
+                'response': response,
+                'user_id': user_id,
+                'timestamp': datetime.now().isoformat(),
+                'status': 'fallback'
+            })
+            
+    except Exception as e:
+        logger.error(f"Error in chat endpoint: {e}")
+        return jsonify({
+            'error': 'Internal server error',
+            'message': 'Sorry, I encountered an error. Please try again.'
+        }), 500
 
 def optimize_image(image_path, max_size=(800, 800), quality=85):
     """Optimize uploaded image to reduce file size"""
@@ -816,9 +874,8 @@ def create_ticket():
             db.session.rollback()
             return jsonify({
                 'status': 'error',
-                'message': 'Error creating ticket'
-            }), 500
-
+                'message': 'Error creating ticket'            }), 500
+        
         # Create initial message
         try:
             message = Message(
@@ -828,7 +885,7 @@ def create_ticket():
                 IsAdminReply=False
             )
             db.session.add(message)
-            db.session.commit()
+            db.session.flush()  # Get message ID without committing
             logger.info(f"Created message with ID: {message.MessageID}")
         except Exception as e:
             logger.error(f"Error creating message: {str(e)}")
@@ -837,16 +894,75 @@ def create_ticket():
                 'status': 'error',
                 'message': 'Error creating message'
             }), 500
+
+        # Try bot response first (Level 0 automation)
+        bot_response = None
+        bot_attempted = False
+        try:
+            bot_response = bot_service.process_query(data['message'], ticket.TicketID)
+            bot_attempted = True
+            
+            if bot_response and bot_response.get('confidence', 0) >= 0.7:
+                # Bot provided a confident response
+                bot_message = Message(
+                    TicketID=ticket.TicketID,
+                    SenderID=None,  # Bot response
+                    Content=bot_response['response'],
+                    IsAdminReply=True,
+                    IsBotResponse=True
+                )
+                db.session.add(bot_message)
+                ticket.bot_attempted = True
+                ticket.resolution_method = 'bot'
+                logger.info(f"Bot provided confident response for ticket {ticket.TicketID}")
+            else:
+                # Bot response not confident enough, escalate to human
+                ticket.bot_attempted = True
+                ticket.escalation_level = 1
+                ticket.resolution_method = 'human'
+                logger.info(f"Bot response not confident enough, escalating ticket {ticket.TicketID} to human")
+                
+        except Exception as e:
+            logger.error(f"Error processing bot response: {str(e)}")
+            ticket.bot_attempted = bot_attempted
+            ticket.escalation_level = 1
+            ticket.resolution_method = 'human'
+
+        # Set initial SLA target based on priority and partner
+        try:
+            sla_monitor.set_initial_sla(ticket)
+        except Exception as e:
+            logger.error(f"Error setting initial SLA: {str(e)}")        # Commit all changes
+        try:
+            db.session.commit()
+            logger.info(f"Successfully committed ticket {ticket.TicketID}")
+        except Exception as e:
+            logger.error(f"Error committing ticket: {str(e)}")
+            db.session.rollback()
+            return jsonify({
+                'status': 'error',
+                'message': 'Error saving ticket'
+            }), 500
         
         logger.info(f"Successfully created ticket {ticket.TicketID} for organization {ticket.OrganizationName}")
-        return jsonify({
+        
+        response_data = {
             'ticket_id': ticket.TicketID,
             'user_id': user.UserID if user else None,
             'priority': ticket.Priority,
             'organization': ticket.OrganizationName,
             'status': 'success',
-            'message': 'Ticket created successfully'
-        })
+            'message': 'Ticket created successfully',
+            'bot_attempted': bot_attempted,
+            'resolution_method': ticket.resolution_method,
+            'escalation_level': ticket.escalation_level
+        }
+        
+        if bot_response and bot_response.get('confidence', 0) >= 0.7:
+            response_data['bot_response'] = bot_response['response']
+            response_data['bot_confidence'] = bot_response['confidence']
+        
+        return jsonify(response_data)
         
     except Exception as e:
         logger.error(f"Unexpected error in create_ticket: {str(e)}")
@@ -1066,16 +1182,7 @@ def uploaded_file(filename):
     """Serve uploaded files"""
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
-@app.route('/admin')
-def admin_dashboard():
-    # Check if admin is authenticated
-    from flask import session, redirect, url_for, flash
-    
-    if not session.get('admin_logged_in'):
-        flash('Admin authentication required to access the dashboard.', 'error')
-        return redirect(url_for('auth.admin_login'))
-    
-    return render_template('admin.html')
+
 
 @app.route('/debug-admin')
 def debug_admin():
@@ -1927,6 +2034,42 @@ def delete_ticket(ticket_id):
         logger.error(f"Error deleting ticket {ticket_id}: {str(e)}", exc_info=True)
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+# Import Bot Service and SLA Monitor
+from bot_service import bot_service
+from sla_monitor import sla_monitor
+
+# Initialize services
+bot_service.app = app
+sla_monitor.app = app
+
+# Start SLA monitoring service only if tables exist
+try:
+    # Check if migration is complete before starting monitoring
+    with app.app_context():
+        from sqlalchemy import text
+        result = db.session.execute(text("""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES 
+            WHERE TABLE_NAME IN ('sla_logs', 'partners', 'bot_configurations')
+        """))
+        table_count = result.scalar()
+        
+        if table_count >= 3:
+            sla_monitor.start_monitoring()
+            logger.info("SLA monitoring service started successfully")
+        else:
+            logger.info("SLA monitoring service not started - tables not ready")
+except Exception as e:
+    logger.warning(f"SLA monitoring service not started: {e}")
+
+# Import extended models
+from models import (
+    Partner, SLALog, TicketStatusLog, AuditLog, EscalationRule,
+    BotConfiguration, BotInteraction
+)
+
+# Register Super Admin Blueprint after all models are loaded
+register_super_admin_blueprint()
 
 if __name__ == "__main__":
     try:

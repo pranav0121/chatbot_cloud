@@ -65,21 +65,58 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM loaded, initializing chat system...');
     loadCategories();
     loadQuickCategories();
-    setupEventListeners();
-
-    // Initialize Socket.IO for real-time chat
+    setupEventListeners();    // Initialize Socket.IO for real-time chat
     window.chatSocket = io();
+    let reconnecting = false;
 
-    // Listen for new messages from server
+    chatSocket.on('connect', () => {
+        console.log('✅ User WebSocket connected');
+        if (currentTicketId) {
+            joinChatRoom(currentTicketId);
+        }
+        reconnecting = false;
+    });
+
+    chatSocket.on('disconnect', () => {
+        console.log('❌ User WebSocket disconnected');
+        reconnecting = true;
+    });
+
+    chatSocket.on('reconnect', () => {
+        console.log('🔄 User WebSocket reconnected');
+        if (currentTicketId) {
+            joinChatRoom(currentTicketId);
+        }
+        reconnecting = false;
+    });
+
     chatSocket.on('new_message', (data) => {
+        console.log('📨 User received new message:', data);
         if (data.ticket_id === currentTicketId) {
             addChatMessage(data.content, data.is_admin ? 'admin' : 'user', data.created_at);
         }
     });
 
+    chatSocket.on('error', (error) => {
+        console.error('🚨 User WebSocket error:', error);
+    });
+
     // Test API connectivity
     testApiConnection();
 });
+
+let lastJoinedTicketId = null;
+
+function joinChatRoom(ticketId) {
+    if (window.chatSocket && chatSocket.connected && ticketId) {
+        if (lastJoinedTicketId && lastJoinedTicketId !== ticketId) {
+            chatSocket.emit('leave_room', { ticket_id: lastJoinedTicketId });
+        }
+        chatSocket.emit('join_room', { ticket_id: ticketId });
+        lastJoinedTicketId = ticketId;
+        console.log(`🚪 User joined room for ticket #${ticketId}`);
+    }
+}
 
 // Setup event listeners
 function setupEventListeners() {
@@ -737,6 +774,12 @@ function startLiveChat(initialMessage) {
     document.getElementById('live-chat-input').style.display = 'block';
     document.getElementById('ticket-number').textContent = currentTicketId;
 
+    // Join the WebSocket room for this ticket
+    if (window.chatSocket && currentTicketId) {
+        chatSocket.emit('join_room', { ticket_id: currentTicketId });
+        console.log(`🚪 User joined room for ticket #${currentTicketId}`);
+    }
+
     // Load and display messages
     loadChatMessages();
 
@@ -827,16 +870,26 @@ async function sendMessage() {
     const input = liveChatInput || messageInput;
     const message = input ? input.value.trim() : '';
 
-    if (!message || !currentTicketId) return;
-
+    if (!message || !currentTicketId) {
+        console.log('❌ Cannot send message: missing message or ticket ID');
+        return;
+    }
     try {
-        // Send message via WebSocket
-        chatSocket.emit('send_message', { ticket_id: currentTicketId, content: message });
-        addChatMessage(message, 'user', new Date().toISOString());
-        input.value = '';
+        if (window.chatSocket && chatSocket.connected) {
+            // Only send if connected and in the right room
+            chatSocket.emit('send_message', {
+                ticket_id: currentTicketId,
+                content: message,
+                is_admin: false
+            });
+            // Do NOT add message to UI here; wait for server confirmation
+            input.value = '';
+            console.log('✅ Message sent via WebSocket');
+        } else {
+            alert('Live chat is not connected. Please wait for connection.');
+        }
     } catch (error) {
-        console.error('Error sending message via WebSocket:', error);
-        showNotification('Error sending message. Please try again.', 'error');
+        console.error('❌ Error sending message:', error);
     }
 }
 

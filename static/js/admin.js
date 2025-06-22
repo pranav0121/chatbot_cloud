@@ -2,10 +2,16 @@
 let currentTicketId = null;
 let activeConversations = new Map();
 let refreshInterval = null;
+let adminSocket = null; // WebSocket connection for admin
+let lastAdminJoinedTicketId = null;
+let selectedAdminFile = null; // For file handling
 
 // Initialize admin dashboard
 document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM Content Loaded - Starting admin dashboard initialization...');
+
+    // Initialize WebSocket connection for real-time chat
+    initializeWebSocket();
 
     // Test if we can reach the server
     fetch('/api/admin/dashboard-stats')
@@ -31,119 +37,135 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('Admin dashboard initialization complete');
 });
 
-// Navigation functions
-function showSection(sectionName) {
-    // Hide all sections
-    document.querySelectorAll('.content-section').forEach(section => {
-        section.classList.remove('active');
-    });
+// Notification system for admin interface
+function showNotification(message, type = 'info', duration = 5000) {
+    // Create notification container if it doesn't exist
+    let notificationContainer = document.getElementById('admin-notifications');
+    if (!notificationContainer) {
+        notificationContainer = document.createElement('div');
+        notificationContainer.id = 'admin-notifications';
+        notificationContainer.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            max-width: 350px;
+        `;
+        document.body.appendChild(notificationContainer);
+    }
 
-    // Show selected section
-    document.getElementById(`${sectionName}-section`).classList.add('active');
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show`;
+    notification.style.cssText = `
+        margin-bottom: 10px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        border: none;
+    `;
 
-    // Update menu items
-    document.querySelectorAll('.menu-item').forEach(item => {
-        item.classList.remove('active');
-    });
-    event.target.classList.add('active');
+    const icon = {
+        'info': 'fas fa-info-circle',
+        'success': 'fas fa-check-circle',
+        'warning': 'fas fa-exclamation-triangle',
+        'error': 'fas fa-times-circle'
+    }[type] || 'fas fa-info-circle';
 
-    // Update page title
-    const titles = {
-        'dashboard': 'Dashboard',
-        'tickets': 'Tickets',
-        'live-chat': 'Live Chat',
-        'analytics': 'Analytics'
-    };
-    document.getElementById('page-title').textContent = titles[sectionName];
+    notification.innerHTML = `
+        <i class="${icon} me-2"></i>${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
 
-    // Load section-specific data
-    if (sectionName === 'tickets') {
-        loadTickets();
-    } else if (sectionName === 'live-chat') {
-        loadActiveConversations();
-    } else if (sectionName === 'analytics') {
-        loadAnalytics();
+    notificationContainer.appendChild(notification);
+
+    // Auto-remove after duration
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.remove();
+        }
+    }, duration);
+}
+
+// Admin connection status indicator
+function updateConnectionStatus(connected) {
+    let statusIndicator = document.getElementById('admin-connection-status');
+    if (!statusIndicator) {
+        statusIndicator = document.createElement('div');
+        statusIndicator.id = 'admin-connection-status';
+        statusIndicator.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            z-index: 1000;
+            transition: all 0.3s ease;
+        `;
+        document.body.appendChild(statusIndicator);
+    }
+
+    if (connected) {
+        statusIndicator.className = 'bg-success text-white';
+        statusIndicator.innerHTML = '<i class="fas fa-wifi me-1"></i>Connected';
+    } else {
+        statusIndicator.className = 'bg-danger text-white';
+        statusIndicator.innerHTML = '<i class="fas fa-wifi me-1"></i>Disconnected';
     }
 }
 
-// Dashboard functions
-async function loadDashboardData() {
-    console.log('=== loadDashboardData CALLED ===');
-    console.log('Current URL:', window.location.href);
-    console.log('Fetching dashboard stats...');
+// Join admin room for a ticket
+function joinAdminRoom(ticketId) {
+    if (adminSocket && adminSocket.connected && ticketId) {
+        if (lastAdminJoinedTicketId && lastAdminJoinedTicketId !== ticketId) {
+            adminSocket.emit('leave_room', { ticket_id: lastAdminJoinedTicketId });
+        }
+        adminSocket.emit('join_room', { ticket_id: ticketId });
+        lastAdminJoinedTicketId = ticketId;
+        console.log(`🚪 Admin joined room for ticket #${ticketId}`);
+    }
+}
 
+// Initialize WebSocket for real-time admin communication
+function initializeWebSocket() {
     try {
-        console.log('Loading dashboard data...');
+        adminSocket = io();
+        let reconnecting = false;
+        console.log('🔌 Admin WebSocket connection initialized');
 
-        // Add timeout to the fetch request
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-
-        const response = await fetch('/api/admin/dashboard-stats', {
-            signal: controller.signal
+        adminSocket.on('connect', () => {
+            console.log('✅ Admin WebSocket connected');
+            if (currentTicketId) {
+                joinAdminRoom(currentTicketId);
+            }
+            reconnecting = false;
         });
-
-        clearTimeout(timeoutId);
-        console.log('Dashboard response status:', response.status);
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('Dashboard API error:', response.status, errorText);
-            throw new Error(`HTTP ${response.status}: ${errorText}`);
-        }
-
-        const stats = await response.json();
-        console.log('Dashboard stats received:', stats);
-
-        // Check if response has error
-        if (stats.error) {
-            console.error('Dashboard stats error:', stats.error);
-            showNotification(`Dashboard error: ${stats.error}`, 'error');
-            return;
-        }
-
-        // Update dashboard stats with fallback values
-        const totalElement = document.getElementById('total-tickets');
-        const pendingElement = document.getElementById('pending-tickets');
-        const resolvedElement = document.getElementById('resolved-tickets');
-        const activeElement = document.getElementById('active-chats');
-
-        if (totalElement) totalElement.textContent = stats.totalTickets || 0;
-        if (pendingElement) pendingElement.textContent = stats.pendingTickets || 0;
-        if (resolvedElement) resolvedElement.textContent = stats.resolvedTickets || 0;
-        if (activeElement) activeElement.textContent = stats.activeChats || 0;
-
-        console.log('Dashboard stats updated successfully');
-
-        // Load recent activity after dashboard stats are loaded
-        loadRecentActivity();
-
-    } catch (error) {
-        console.error('Error loading dashboard data:', error);
-
-        let errorMessage = 'Failed to load dashboard data. ';
-        if (error.name === 'AbortError') {
-            errorMessage += 'Request timed out.';
-        } else if (error.message.includes('Failed to fetch')) {
-            errorMessage += 'Please check if the server is running.';
-        } else {
-            errorMessage += 'Please check the server connection.';
-        }
-
-        showNotification(errorMessage, 'error');
-
-        // Set fallback values with proper null checks
-        const elements = [
-            'total-tickets', 'pending-tickets', 'resolved-tickets', 'active-chats'
-        ];
-
-        elements.forEach(id => {
-            const element = document.getElementById(id);
-            if (element) {
-                element.textContent = '?';
+        adminSocket.on('disconnect', () => {
+            console.log('❌ Admin WebSocket disconnected');
+            reconnecting = true;
+        });
+        adminSocket.on('reconnect', () => {
+            console.log('🔄 Admin WebSocket reconnected');
+            if (currentTicketId) {
+                joinAdminRoom(currentTicketId);
+            }
+            reconnecting = false;
+        });
+        adminSocket.on('new_message', (data) => {
+            console.log('📨 New message received:', data);
+            if (data.ticket_id === currentTicketId) {
+                addNewMessageToChat(data);
+            }
+            loadActiveConversations();
+            if (!data.is_admin) {
+                showNotification(`New message from user in ticket #${data.ticket_id}`, 'info');
             }
         });
-        document.getElementById('active-chats').textContent = '?';
+        adminSocket.on('error', (error) => {
+            console.error('🚨 Admin WebSocket error:', error);
+        });
+    } catch (e) {
+        console.error('Failed to initialize WebSocket:', e);
     }
 }
 
@@ -171,6 +193,49 @@ async function loadRecentActivity() {
         `).join('');
     } catch (error) {
         console.error('Error loading recent activity:', error);
+    }
+}
+
+// Dashboard data loading
+async function loadDashboardData() {
+    try {
+        console.log('🔄 Loading dashboard data...');
+
+        const response = await fetch('/api/admin/dashboard-stats');
+        console.log('Dashboard response status:', response.status);
+
+        if (!response.ok) {
+            if (response.status === 401 || response.status === 403) {
+                // Redirect to admin login if not authenticated
+                window.location.href = '/auth/admin_login';
+                return;
+            }
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        console.log('Dashboard data received:', data);
+
+        // Update dashboard cards with received data
+        document.getElementById('total-tickets').textContent = data.totalTickets || 0;
+        document.getElementById('pending-tickets').textContent = data.pendingTickets || 0;
+        document.getElementById('resolved-tickets').textContent = data.resolvedTickets || 0;
+        document.getElementById('active-chats').textContent = data.activeChats || 0;
+
+        console.log('✅ Dashboard data loaded successfully');
+
+        // Also load recent activity
+        await loadRecentActivity();
+
+    } catch (error) {
+        console.error('❌ Error loading dashboard data:', error);
+        showNotification(`Failed to load dashboard data: ${error.message}`, 'error');
+
+        // Set default values if loading fails
+        document.getElementById('total-tickets').textContent = '?';
+        document.getElementById('pending-tickets').textContent = '?';
+        document.getElementById('resolved-tickets').textContent = '?';
+        document.getElementById('active-chats').textContent = '?';
     }
 }
 
@@ -469,7 +534,11 @@ async function loadActiveConversations() {
 }
 
 async function selectConversation(ticketId) {
+    if (currentTicketId && adminSocket && adminSocket.connected) {
+        adminSocket.emit('leave_room', { ticket_id: currentTicketId });
+    }
     currentTicketId = ticketId;
+    joinAdminRoom(ticketId);
 
     // Update UI
     document.querySelectorAll('.conversation-item').forEach(item => {
@@ -528,28 +597,23 @@ async function loadChatMessages(ticketId) {
 async function sendAdminMessage() {
     const input = document.getElementById('admin-message-input');
     const message = input.value.trim();
-
     if (!message || !currentTicketId) return;
-
     try {
-        const response = await fetch(`/api/tickets/${currentTicketId}/messages`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
+        if (adminSocket && adminSocket.connected) {
+            adminSocket.emit('send_message', {
+                ticket_id: currentTicketId,
                 content: message,
                 is_admin: true
-            })
-        });
-
-        if (response.ok) {
+            });
             input.value = '';
-            await loadChatMessages(currentTicketId);
-            await loadActiveConversations(); // Refresh conversations list
+            // Do NOT add message to UI here; wait for server confirmation
+            console.log('✅ Admin message sent via WebSocket');
+        } else {
+            alert('Live chat is not connected. Please wait for connection.');
         }
     } catch (error) {
-        console.error('Error sending admin message:', error);
+        console.error('❌ Error sending admin message:', error);
+        showNotification('Failed to send message. Please try again.', 'error');
     }
 }
 
@@ -764,10 +828,41 @@ function showNotification(message, type = 'info') {
 }
 
 function refreshData() {
-    loadDashboardData();
-    loadTickets();
-    loadActiveConversations();
-    showNotification('Data refreshed successfully', 'success');
+    console.log('🔄 Refreshing all admin data...');
+    showNotification('Refreshing data...', 'info', 2000);
+
+    // Refresh data based on current active section
+    const activeSection = document.querySelector('.content-section.active');
+    if (activeSection) {
+        const sectionId = activeSection.id.replace('-section', '');
+
+        switch (sectionId) {
+            case 'dashboard':
+                loadDashboardData();
+                break;
+            case 'tickets':
+                loadTickets();
+                loadCategories();
+                break;
+            case 'live-chat':
+                loadActiveConversations();
+                if (currentTicketId) {
+                    loadChatMessages(currentTicketId);
+                }
+                break;
+            case 'analytics':
+                loadAnalytics();
+                break;
+        }
+    } else {
+        // Default refresh all
+        loadDashboardData();
+        loadTickets();
+        loadCategories();
+        loadActiveConversations();
+    }
+
+    console.log('✅ Data refresh completed');
 }
 
 function startAutoRefresh() {
@@ -845,6 +940,64 @@ function startChat(ticketId) {
     setTimeout(() => {
         selectConversation(ticketId);
     }, 100);
+}
+
+// Section management
+function showSection(sectionName) {
+    console.log(`🔄 Switching to section: ${sectionName}`);
+
+    // Remove active class from all sections
+    document.querySelectorAll('.content-section').forEach(section => {
+        section.classList.remove('active');
+    });
+
+    // Remove active class from all menu items
+    document.querySelectorAll('.menu-item').forEach(item => {
+        item.classList.remove('active');
+    });
+
+    // Show selected section
+    const targetSection = document.getElementById(`${sectionName}-section`);
+    if (targetSection) {
+        targetSection.classList.add('active');
+    }
+
+    // Activate corresponding menu item
+    const menuItem = document.querySelector(`[onclick="showSection('${sectionName}')"]`);
+    if (menuItem) {
+        menuItem.classList.add('active');
+    }
+
+    // Update page title
+    const titles = {
+        'dashboard': 'Dashboard',
+        'tickets': 'Tickets',
+        'live-chat': 'Live Chat',
+        'analytics': 'Analytics'
+    };
+
+    const pageTitle = document.getElementById('page-title');
+    if (pageTitle && titles[sectionName]) {
+        pageTitle.textContent = titles[sectionName];
+    }
+
+    // Load section-specific data
+    switch (sectionName) {
+        case 'dashboard':
+            loadDashboardData();
+            break;
+        case 'tickets':
+            loadTickets();
+            break;
+        case 'live-chat':
+            loadActiveConversations();
+            break;
+        case 'analytics':
+            loadAnalytics();
+            break;
+    }
+
+    console.log(`✅ Section switched to: ${sectionName}`);
 }
 
 // Helper function to format file size
@@ -995,4 +1148,22 @@ async function deleteCurrentTicket() {
     setTimeout(() => {
         deleteTicket(currentTicketId);
     }, 300);
+}
+
+// File handling for admin chat
+function handleAdminFileSelect(event) {
+    const file = event.target.files[0];
+    if (file) {
+        selectedAdminFile = file;
+        document.getElementById('admin-selected-file-name').textContent = file.name;
+        document.getElementById('admin-file-preview').style.display = 'block';
+        console.log('📎 Admin file selected:', file.name);
+    }
+}
+
+function clearAdminFileSelection() {
+    selectedAdminFile = null;
+    document.getElementById('admin-file-input').value = '';
+    document.getElementById('admin-file-preview').style.display = 'none';
+    console.log('❌ Admin file selection cleared');
 }

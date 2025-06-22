@@ -70,7 +70,12 @@ class Config:
     
     # Application configuration
     DEBUG = os.getenv('FLASK_DEBUG', 'False').lower() in ('true', '1', 't')
-    
-    # API configuration
+      # API configuration
     API_TITLE = 'Support Chatbot API'
     API_VERSION = 'v1'
+    
+    # Odoo configuration
+    ODOO_URL = os.getenv('ODOO_URL')
+    ODOO_DB = os.getenv('ODOO_DB')
+    ODOO_USERNAME = os.getenv('ODOO_USERNAME')
+    ODOO_PASSWORD = os.getenv('ODOO_PASSWORD')

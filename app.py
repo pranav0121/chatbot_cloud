@@ -16,6 +16,9 @@ from sqlalchemy.sql import case
 from functools import wraps
 import warnings
 
+# Odoo Integration
+from odoo_service import OdooService
+
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -53,6 +56,23 @@ app.config['LANGUAGES'] = {
     'zh': '中文'
 }
 babel = Babel(app)
+
+# Initialize Odoo Service
+odoo_service = None
+try:
+    if hasattr(config_obj, 'ODOO_URL') and config_obj.ODOO_URL:
+        odoo_service = OdooService(
+            url=config_obj.ODOO_URL,
+            db=config_obj.ODOO_DB,
+            username=config_obj.ODOO_USERNAME,
+            password=config_obj.ODOO_PASSWORD
+        )
+        logger.info("Odoo service initialized successfully")
+    else:
+        logger.warning("Odoo configuration not found - Odoo features will be disabled")
+except Exception as e:
+    logger.error(f"Failed to initialize Odoo service: {e}")
+    odoo_service = None
 
 # Add error handling for translation loading
 @app.errorhandler(UnicodeDecodeError)
@@ -249,13 +269,16 @@ class Ticket(db.Model):
     AssignedTo = db.Column(db.Integer, db.ForeignKey('Users.UserID'), nullable=True)  # Admin who handles this
     CreatedAt = db.Column(db.DateTime, default=datetime.utcnow)
     UpdatedAt = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # Extended Ticket model fields for enterprise features
+      # Extended Ticket model fields for enterprise features
     escalation_level = db.Column(db.Integer, default=0)  # 0=Bot, 1=ICP, 2=YouCloud  
     current_sla_target = db.Column(db.DateTime, nullable=True)
     resolution_method = db.Column(db.String(50), nullable=True)  # Bot, ICP, YouCloud
     bot_attempted = db.Column(db.Boolean, default=False)
     partner_id = db.Column(db.Integer, nullable=True)  # Will add FK later
+    
+    # Odoo Integration fields
+    odoo_customer_id = db.Column(db.Integer, nullable=True)  # Odoo partner ID
+    odoo_ticket_id = db.Column(db.Integer, nullable=True)  # Odoo helpdesk ticket ID
 
     # Relationships
     user = db.relationship('User', foreign_keys=[UserID], backref='tickets')
@@ -377,58 +400,89 @@ def load_user(user_id):
 # SocketIO event handlers for real-time chat
 @socketio.on('join_room')
 def handle_join_room(data):
-    room = f"ticket_{data['ticket_id']}"
-    join_room(room)
+    try:
+        ticket_id = data.get('ticket_id')
+        room = f"ticket_{ticket_id}"
+        join_room(room)
+        logger.info(f"User joined room: {room}")
+        emit('room_joined', {'ticket_id': ticket_id, 'room': room})
+    except Exception as e:
+        logger.error(f"Error joining room: {e}")
 
 @socketio.on('leave_room')
 def handle_leave_room(data):
-    room = f"ticket_{data['ticket_id']}"
-    leave_room(room)
+    try:
+        ticket_id = data.get('ticket_id')
+        room = f"ticket_{ticket_id}"
+        leave_room(room)
+        logger.info(f"User left room: {room}")
+    except Exception as e:
+        logger.error(f"Error leaving room: {e}")
 
 @socketio.on('send_message')
 def handle_send_message(data):
-    ticket_id = data.get('ticket_id')
-    content = data.get('content')
-    is_admin = data.get('is_admin', False)
-    sender_id = getattr(current_user, 'UserID', None)
-    # Save message to database
-    msg = Message(TicketID=ticket_id, SenderID=sender_id,
-                  Content=content, IsAdminReply=is_admin)
-    db.session.add(msg)
-    # Update ticket status and timestamp
-    ticket = Ticket.query.get(ticket_id)
-    if ticket:
-        ticket.UpdatedAt = datetime.utcnow()
-        if not is_admin and ticket.Status == 'open':
-            ticket.Status = 'in_progress'
-    db.session.commit()
-    # Handle attachments if present
-    attachments_info = []
-    if data.get('attachments'):
-        for att in data.get('attachments'):
-            # Link existing Attachment record to this message
-            attachment = Attachment.query.get(att.get('id'))
-            if attachment:
-                attachment.MessageID = msg.MessageID
-                db.session.add(attachment)
-                attachments_info.append({
-                    'id': attachment.AttachmentID,
-                    'original_name': attachment.OriginalName,
-                    'url': url_for('uploaded_file', filename=attachment.StoredName, _external=False),
-                    'file_size': attachment.FileSize,
-                    'mime_type': attachment.MimeType
-                })
-    db.session.commit()
-    # Prepare message payload
-    msg_data = {
-        'ticket_id': ticket_id,        'id': msg.MessageID,
-        'content': msg.Content,
-        'is_admin': msg.IsAdminReply,
-        'created_at': format_timestamp_with_tz(msg.CreatedAt),
-        'attachments': attachments_info
-    }
-    # Broadcast to room
-    emit('new_message', msg_data, room=f"ticket_{ticket_id}")
+    try:
+        ticket_id = data.get('ticket_id')
+        content = data.get('content')
+        is_admin = data.get('is_admin', False)
+        sender_id = getattr(current_user, 'UserID', None) if current_user.is_authenticated else None
+        
+        logger.info(f"📨 Received message for ticket #{ticket_id}: {content[:50]}... (is_admin: {is_admin})")
+        
+        # Save message to database
+        msg = Message(TicketID=ticket_id, SenderID=sender_id,
+                      Content=content, IsAdminReply=is_admin)
+        db.session.add(msg)
+        
+        # Update ticket status and timestamp
+        ticket = Ticket.query.get(ticket_id)
+        if ticket:
+            ticket.UpdatedAt = datetime.utcnow()
+            if not is_admin and ticket.Status == 'open':
+                ticket.Status = 'in_progress'
+        
+        db.session.commit()
+        logger.info(f"✅ Message saved to database with ID: {msg.MessageID}")
+        
+        # Handle attachments if present
+        attachments_info = []
+        if data.get('attachments'):
+            for att in data.get('attachments'):
+                # Link existing Attachment record to this message
+                attachment = Attachment.query.get(att.get('id'))
+                if attachment:
+                    attachment.MessageID = msg.MessageID
+                    db.session.add(attachment)
+                    attachments_info.append({
+                        'id': attachment.AttachmentID,
+                        'original_name': attachment.OriginalName,
+                        'url': url_for('uploaded_file', filename=attachment.StoredName, _external=False),
+                        'file_size': attachment.FileSize,
+                        'mime_type': attachment.MimeType
+                    })
+        
+        db.session.commit()
+        
+        # Prepare message payload
+        msg_data = {
+            'ticket_id': ticket_id,
+            'id': msg.MessageID,
+            'content': msg.Content,
+            'is_admin': msg.IsAdminReply,
+            'created_at': format_timestamp_with_tz(msg.CreatedAt),
+            'attachments': attachments_info
+        }
+        
+        # Broadcast to room
+        room = f"ticket_{ticket_id}"
+        logger.info(f"📡 Broadcasting message to room: {room}")
+        emit('new_message', msg_data, room=room)
+        
+    except Exception as e:
+        logger.error(f"❌ Error handling send_message: {e}")
+        import traceback
+        traceback.print_exc()
+        emit('error', {'message': 'Failed to send message'})
 
 # Enhanced session management
 @app.teardown_appcontext
@@ -490,6 +544,73 @@ def register_super_admin_blueprint():
 def admin_dashboard():
     """Admin dashboard route"""
     return render_template('admin.html')
+
+# Direct routes for login and register (for convenience)
+@app.route('/login')
+def login_redirect():
+    return redirect(url_for('auth.login'))
+
+@app.route('/register')
+def register_redirect():
+    return redirect(url_for('auth.register'))
+
+@app.route('/logout')
+@login_required
+def logout():
+    from flask_login import logout_user, current_user
+    user_name = current_user.Name if current_user.is_authenticated else "User"
+    logout_user()
+    flash(f'Goodbye {user_name}! You have been logged out successfully.', 'success')
+    return redirect(url_for('index'))
+
+@app.route('/profile')
+@login_required
+def user_profile():
+    """User profile page"""
+    try:
+        return render_template('user_profile.html', user=current_user)
+    except Exception as e:
+        flash(f'Error loading profile: {str(e)}', 'error')
+        return redirect(url_for('index'))
+
+@app.route('/profile/edit', methods=['GET', 'POST'])
+@login_required
+def edit_profile():
+    """Edit user profile"""
+    if request.method == 'POST':
+        try:
+            # Update user information
+            current_user.Name = request.form.get('name', current_user.Name)
+            current_user.Position = request.form.get('position', current_user.Position)
+            current_user.Department = request.form.get('department', current_user.Department)
+            current_user.Phone = request.form.get('phone', current_user.Phone)
+            current_user.PreferredLanguage = request.form.get('language', current_user.PreferredLanguage)
+            
+            db.session.commit()
+            flash('Profile updated successfully!', 'success')
+            return redirect(url_for('user_profile'))
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error updating profile: {str(e)}', 'error')
+            return redirect(url_for('user_profile'))
+    
+    return render_template('edit_profile.html', user=current_user)
+
+@app.route('/my-tickets')
+@login_required
+def my_tickets():
+    """User's tickets page"""
+    try:
+        # Get user's tickets
+        user_tickets = Ticket.query.filter_by(UserID=current_user.UserID).order_by(Ticket.CreatedAt.desc()).all()
+        
+        # Get categories for display
+        categories = {cat.CategoryID: cat.Name for cat in Category.query.all()}
+        
+        return render_template('my_tickets.html', tickets=user_tickets, categories=categories)
+    except Exception as e:
+        flash(f'Error loading tickets: {str(e)}', 'error')
+        return redirect(url_for('index'))
 
 # Routes
 @app.route('/test')
@@ -874,7 +995,8 @@ def create_ticket():
             db.session.rollback()
             return jsonify({
                 'status': 'error',
-                'message': 'Error creating ticket'            }), 500
+                'message': 'Error creating ticket'
+            }), 500
         
         # Create initial message
         try:
@@ -894,7 +1016,6 @@ def create_ticket():
                 'status': 'error',
                 'message': 'Error creating message'
             }), 500
-
         # Try bot response first (Level 0 automation)
         bot_response = None
         bot_attempted = False
@@ -927,6 +1048,50 @@ def create_ticket():
             ticket.bot_attempted = bot_attempted
             ticket.escalation_level = 1
             ticket.resolution_method = 'human'
+
+        # 🔥 NEW: Sync ticket to Odoo Online
+        odoo_customer_id = None
+        odoo_ticket_id = None
+        try:
+            if odoo_service:
+                logger.info(f"Syncing ticket {ticket.TicketID} to Odoo Online...")
+                
+                # First, create/find customer in Odoo
+                if user and user.Email:
+                    try:
+                        odoo_customer_id = odoo_service.create_customer(
+                            name=user.Name,
+                            email=user.Email,
+                            comment=f"Organization: {user.OrganizationName}" if user.OrganizationName else None
+                        )
+                        logger.info(f"Created/found customer in Odoo with ID: {odoo_customer_id}")
+                    except Exception as e:
+                        logger.warning(f"Could not create customer in Odoo: {e}")
+                
+                # Create ticket in Odoo
+                try:
+                    odoo_ticket_id = odoo_service.create_ticket(
+                        name=ticket.Subject,
+                        description=f"Ticket #{ticket.TicketID} from {ticket.OrganizationName}\n\nMessage: {data['message']}",
+                        partner_id=odoo_customer_id,
+                        priority='2' if ticket.Priority == 'high' else '1',  # Odoo priority mapping
+                        tag_ids=['chatbot-created']
+                    )
+                    
+                    # Store Odoo IDs for future reference
+                    ticket.odoo_customer_id = odoo_customer_id
+                    ticket.odoo_ticket_id = odoo_ticket_id
+                    
+                    logger.info(f"✅ Ticket {ticket.TicketID} synced to Odoo ticket {odoo_ticket_id}")
+                    
+                except Exception as e:
+                    logger.warning(f"Could not create ticket in Odoo: {e}")
+            else:
+                logger.warning("Odoo service not available for ticket sync")
+                
+        except Exception as e:
+            logger.error(f"Error syncing ticket to Odoo: {e}")
+            # Don't fail the entire ticket creation if Odoo sync fails
 
         # Set initial SLA target based on priority and partner
         try:
@@ -2070,6 +2235,146 @@ from models import (
 
 # Register Super Admin Blueprint after all models are loaded
 register_super_admin_blueprint()
+
+# ================================
+# ODOO API ENDPOINTS
+# ================================
+
+@app.route('/api/odoo/test-connection', methods=['GET'])
+def test_odoo_connection():
+    """Test Odoo connection and return status"""
+    if not odoo_service:
+        return jsonify({
+            'status': 'error',
+            'message': 'Odoo service not initialized'
+        }), 503
+    
+    try:
+        result = odoo_service.test_connection()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/odoo/customers', methods=['GET', 'POST'])
+def odoo_customers():
+    """Handle customer operations in Odoo"""
+    if not odoo_service:
+        return jsonify({'error': 'Odoo service not available'}), 503
+    
+    if request.method == 'GET':
+        try:
+            limit = request.args.get('limit', 10, type=int)
+            offset = request.args.get('offset', 0, type=int)
+            query = request.args.get('q')
+            
+            if query:
+                customers = odoo_service.search_customers(query, limit)
+            else:
+                customers = odoo_service.get_customers(limit, offset)
+            
+            return jsonify({
+                'status': 'success',
+                'customers': customers,
+                'count': len(customers)
+            })
+        except Exception as e:
+            logger.error(f"Error getting customers: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    elif request.method == 'POST':
+        try:
+            data = request.get_json()
+            if not data or 'name' not in data:
+                return jsonify({'error': 'Customer name is required'}), 400
+            
+            customer_id = odoo_service.create_customer(
+                name=data['name'],
+                email=data.get('email'),
+                phone=data.get('phone'),
+                **{k: v for k, v in data.items() if k not in ['name', 'email', 'phone']}
+            )
+            
+            return jsonify({
+                'status': 'success',
+                'customer_id': customer_id,
+                'message': f'Customer {data["name"]} created successfully'
+            }), 201
+        except Exception as e:
+            logger.error(f"Error creating customer: {e}")
+            return jsonify({'error': str(e)}), 500
+
+@app.route('/api/odoo/tickets', methods=['GET', 'POST'])
+def odoo_tickets():
+    """Handle ticket operations in Odoo"""
+    if not odoo_service:
+        return jsonify({'error': 'Odoo service not available'}), 503
+    
+    if request.method == 'GET':
+        try:
+            limit = request.args.get('limit', 10, type=int)
+            offset = request.args.get('offset', 0, type=int)
+            partner_id = request.args.get('partner_id', type=int)
+            
+            if partner_id:
+                tickets = odoo_service.get_customer_tickets(partner_id, limit)
+            else:
+                tickets = odoo_service.get_tickets(limit, offset)
+            
+            return jsonify({
+                'status': 'success',
+                'tickets': tickets,
+                'count': len(tickets)
+            })
+        except Exception as e:
+            logger.error(f"Error getting tickets: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    elif request.method == 'POST':
+        try:
+            data = request.get_json()
+            if not data or 'name' not in data:
+                return jsonify({'error': 'Ticket subject is required'}), 400
+            
+            ticket_id = odoo_service.create_ticket(
+                name=data['name'],
+                description=data.get('description', ''),
+                partner_id=data.get('partner_id'),
+                priority=data.get('priority', '1'),
+                **{k: v for k, v in data.items() if k not in ['name', 'description', 'partner_id', 'priority']}
+            )
+            
+            return jsonify({
+                'status': 'success',
+                'ticket_id': ticket_id,
+                'message': f'Ticket "{data["name"]}" created successfully'
+            }), 201
+        except Exception as e:
+            logger.error(f"Error creating ticket: {e}")
+            return jsonify({'error': str(e)}), 500
+
+@app.route('/api/odoo/tickets/<int:ticket_id>', methods=['PUT'])
+def update_odoo_ticket(ticket_id):
+    """Update a ticket in Odoo"""
+    if not odoo_service:
+        return jsonify({'error': 'Odoo service not available'}), 503
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        result = odoo_service.update_ticket(ticket_id, **data)
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'Ticket {ticket_id} updated successfully'
+        })
+    except Exception as e:
+        logger.error(f"Error updating ticket: {e}")
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == "__main__":
     try:

@@ -1355,8 +1355,27 @@ def debug_admin():
     return render_template('debug_admin.html')
 
 @app.route('/api/admin/dashboard-stats', methods=['GET'])
-@admin_required
 def get_dashboard_stats():
+    # Support both session-based and token-based authentication
+    try:
+        from uv_integration import validate_uv_token
+        
+        # Check for Urban Vyapari token
+        token = request.args.get('token') or request.headers.get('Authorization', '').replace('Bearer ', '')
+        if token:
+            payload = validate_uv_token(token)
+            if not payload:
+                return jsonify({"error": "Invalid or expired token"}), 401
+            request.uv_admin = payload
+        else:
+            # Fall back to session-based authentication
+            if 'admin_logged_in' not in session:
+                return jsonify({"error": "Authentication required", "login_url": "/admin/login"}), 401
+    except ImportError:
+        # If UV integration not available, use regular admin auth
+        if 'admin_logged_in' not in session:
+            return jsonify({"error": "Authentication required", "login_url": "/admin/login"}), 401
+    
     try:
         logger.info("Loading dashboard stats...")
         
@@ -1394,8 +1413,19 @@ def get_dashboard_stats():
             'totalTickets': total_tickets,
             'pendingTickets': pending_tickets,
             'resolvedTickets': resolved_tickets,
-            'activeChats': active_chats
+            'activeChats': active_chats,
+            'success': True
         }
+        
+        # Add Urban Vyapari metadata if accessed via token
+        if hasattr(request, 'uv_admin'):
+            result['uv_metadata'] = {
+                'accessed_by': request.uv_admin['admin_name'],
+                'source': 'urbanvyapari',
+                'timestamp': datetime.utcnow().isoformat(),
+                'admin_id': request.uv_admin['admin_id']
+            }
+            logger.info(f"Urban Vyapari dashboard access by: {request.uv_admin['admin_name']}")
         
         logger.info(f"Dashboard stats result: {result}")
         return jsonify(result)
@@ -1431,10 +1461,37 @@ def get_recent_activity():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/admin/tickets', methods=['GET'])
-@admin_required
 def get_admin_tickets():
+    # Support both session-based and token-based authentication
+    try:
+        from uv_integration import validate_uv_token
+        
+        # Check for Urban Vyapari token
+        token = request.args.get('token') or request.headers.get('Authorization', '').replace('Bearer ', '')
+        if token:
+            payload = validate_uv_token(token)
+            if not payload:
+                return jsonify({"error": "Invalid or expired token"}), 401
+            request.uv_admin = payload
+        else:
+            # Fall back to session-based authentication
+            if 'admin_logged_in' not in session:
+                return jsonify({"error": "Authentication required", "login_url": "/admin/login"}), 401
+    except ImportError:
+        # If UV integration not available, use regular admin auth
+        if 'admin_logged_in' not in session:
+            return jsonify({"error": "Authentication required", "login_url": "/admin/login"}), 401
+    
     try:
         logger.info("Loading admin tickets...")
+        
+        # Apply query filters for Urban Vyapari integration
+        try:
+            from uv_integration import apply_query_filters
+            filters = apply_query_filters(request.args)
+            logger.info(f"Applied filters: {filters}")
+        except:
+            filters = {'status': 'all', 'priority': 'all', 'category': 'all', 'limit': 50, 'offset': 0}
         
         # Ensure tables exist first
         try:
@@ -1460,13 +1517,41 @@ def get_admin_tickets():
             logger.info(f"Found {ticket_count} tickets in database")
             
             if ticket_count == 0:
-                logger.info("No tickets found, returning empty array")
-                return jsonify([])
+                logger.info("No tickets found, returning empty response")
+                return jsonify({
+                    'success': True,
+                    'tickets': [],
+                    'pagination': {
+                        'total': 0,
+                        'limit': filters['limit'],
+                        'offset': filters['offset'],
+                        'has_more': False
+                    },
+                    'filters': {
+                        'status': filters['status'],
+                        'priority': filters['priority'],
+                        'category': filters['category']
+                    }
+                })
             
         except Exception as count_error:
             logger.error(f"Error counting tickets: {str(count_error)}")
-            # Table might not exist, try to create sample data
-            return jsonify([])
+            # Table might not exist, return empty response
+            return jsonify({
+                'success': True,
+                'tickets': [],
+                'pagination': {
+                    'total': 0,
+                    'limit': filters['limit'],
+                    'offset': filters['offset'],
+                    'has_more': False
+                },
+                'filters': {
+                    'status': filters['status'],
+                    'priority': filters['priority'],
+                    'category': filters['category']
+                }
+            })
         
         # Try to get tickets with detailed logging and priority sorting
         try:
@@ -1505,7 +1590,49 @@ def get_admin_tickets():
                 logger.info(f"Processed ticket {ticket.TicketID}: {ticket.Subject} - Priority: {ticket.Priority}, Org: {ticket_data['organization']}")
             
             logger.info(f"Returning {len(result)} tickets to admin panel sorted by priority")
-            return jsonify(result)
+            
+            # Apply filters if using Urban Vyapari integration
+            if filters['status'] != 'all':
+                result = [t for t in result if t['status'] == filters['status']]
+            if filters['priority'] != 'all':
+                result = [t for t in result if t['priority'] == filters['priority']]
+            if filters['category'] != 'all' and filters['category'] != 'Unknown':
+                result = [t for t in result if t['category'].lower() == filters['category'].lower()]
+            
+            # Apply pagination
+            total_count = len(result)
+            start_idx = filters['offset']
+            end_idx = start_idx + filters['limit']
+            paginated_result = result[start_idx:end_idx]
+            
+            # Always return consistent dictionary format
+            response_data = {
+                'success': True,
+                'tickets': paginated_result,
+                'pagination': {
+                    'total': total_count,
+                    'limit': filters['limit'],
+                    'offset': filters['offset'],
+                    'has_more': end_idx < total_count
+                },
+                'filters': {
+                    'status': filters['status'],
+                    'priority': filters['priority'],
+                    'category': filters['category']
+                }
+            }
+            
+            # Add Urban Vyapari metadata if accessed via token
+            if hasattr(request, 'uv_admin'):
+                response_data['uv_metadata'] = {
+                    'accessed_by': request.uv_admin['admin_name'],
+                    'source': 'urbanvyapari',
+                    'timestamp': datetime.utcnow().isoformat(),
+                    'admin_id': request.uv_admin['admin_id']
+                }
+                logger.info(f"Urban Vyapari access by: {request.uv_admin['admin_name']}")
+            
+            return jsonify(response_data)
             
         except Exception as query_error:
             logger.error(f"Error querying tickets with joins: {str(query_error)}", exc_info=True)
@@ -1529,15 +1656,80 @@ def get_admin_tickets():
                         'updated_at': format_timestamp_with_tz(ticket.UpdatedAt) if ticket.UpdatedAt else format_timestamp_with_tz(ticket.CreatedAt)
                     })
                 
-                return jsonify(result)
+                # Apply filters if using Urban Vyapari integration
+                if filters['status'] != 'all':
+                    result = [t for t in result if t['status'] == filters['status']]
+                if filters['priority'] != 'all':
+                    result = [t for t in result if t['priority'] == filters['priority']]
+                if filters['category'] != 'all' and filters['category'] != 'Unknown':
+                    result = [t for t in result if t['category'].lower() == filters['category'].lower()]
+                
+                # Apply pagination
+                total_count = len(result)
+                start_idx = filters['offset']
+                end_idx = start_idx + filters['limit']
+                result = result[start_idx:end_idx]
+                
+                # Enhance response for Urban Vyapari
+                response_data = {
+                    'success': True,
+                    'tickets': result,
+                    'pagination': {
+                        'total': total_count,
+                        'limit': filters['limit'],
+                        'offset': filters['offset'],
+                        'has_more': end_idx < total_count
+                    },
+                    'filters': {
+                        'status': filters['status'],
+                        'priority': filters['priority'],
+                        'category': filters['category']
+                    }
+                }
+                
+                # Add Urban Vyapari metadata if accessed via token
+                if hasattr(request, 'uv_admin'):
+                    response_data['uv_metadata'] = {
+                        'accessed_by': request.uv_admin['admin_name'],
+                        'source': 'urbanvyapari',
+                        'timestamp': datetime.utcnow().isoformat(),
+                        'admin_id': request.uv_admin['admin_id']
+                    }
+                    logger.info(f"Urban Vyapari access by: {request.uv_admin['admin_name']}")
+                
+                return jsonify(response_data)
                 
             except Exception as simple_error:
                 logger.error(f"Even simple query failed: {str(simple_error)}")
-                return jsonify([])  # Return empty array instead of error
+                return jsonify({
+                    'success': True,
+                    'tickets': [],
+                    'pagination': {
+                        'total': 0,
+                        'limit': filters['limit'],
+                        'offset': filters['offset'],
+                        'has_more': False
+                    },
+                    'filters': {
+                        'status': filters['status'],
+                        'priority': filters['priority'],
+                        'category': filters['category']
+                    }
+                })
         
     except Exception as e:
         logger.error(f"Unexpected error in get_admin_tickets: {str(e)}", exc_info=True)
-        return jsonify([])  # Return empty array instead of error
+        return jsonify({
+            'success': False,
+            'error': 'Failed to fetch tickets',
+            'tickets': [],
+            'pagination': {
+                'total': 0,
+                'limit': 50,
+                'offset': 0,
+                'has_more': False
+            }
+        })
 
 @app.route('/api/admin/tickets/<int:ticket_id>', methods=['GET'])
 @admin_required
@@ -2376,7 +2568,88 @@ def update_odoo_ticket(ticket_id):
         logger.error(f"Error updating ticket: {e}")
         return jsonify({'error': str(e)}), 500
 
-if __name__ == "__main__":
+# Urban Vyapari Integration Endpoints (NEW)
+try:
+    from uv_integration import generate_uv_token, validate_uv_api_key, uv_auth_required, add_uv_response_metadata, apply_query_filters
+    
+    @app.route('/api/generate-uv-token', methods=['POST'])
+    def generate_uv_access_token():
+        """Generate access token for Urban Vyapari integration"""
+        try:
+            data = request.json
+            if not data:
+                return jsonify({'success': False, 'error': 'JSON data required'}), 400
+            
+            # Validate Urban Vyapari API key
+            uv_api_key = data.get('uv_api_key')
+            if not validate_uv_api_key(uv_api_key):
+                return jsonify({'success': False, 'error': 'Invalid Urban Vyapari API key'}), 401
+            
+            # Extract admin information
+            admin_info = {
+                'admin_id': data.get('admin_id'),
+                'admin_name': data.get('admin_name'),
+                'admin_email': data.get('admin_email')
+            }
+            
+            # Validate required fields
+            if not all(admin_info.values()):
+                return jsonify({'success': False, 'error': 'admin_id, admin_name, and admin_email are required'}), 400
+            
+            # Generate token
+            token = generate_uv_token(admin_info)
+            
+            logger.info(f"Generated Urban Vyapari token for admin: {admin_info['admin_name']} ({admin_info['admin_email']})")
+            
+            return jsonify({
+                'success': True,
+                'access_token': token,
+                'token_type': 'Bearer',
+                'expires_in': 86400,  # 24 hours in seconds
+                'admin_info': admin_info
+            })
+            
+        except Exception as e:
+            logger.error(f"Error generating Urban Vyapari token: {str(e)}")
+            return jsonify({'success': False, 'error': 'Internal server error'}), 500
+
+    @app.route('/tickets-portal')
+    def tickets_portal_uv():
+        """Web portal for Urban Vyapari tickets integration"""
+        try:
+            from uv_integration import validate_uv_token
+            
+            token = request.args.get('token')
+            
+            if not token:
+                return render_template('uv_token_required.html'), 401
+            
+            # Validate token
+            payload = validate_uv_token(token)
+            if not payload:
+                return render_template('uv_invalid_token.html'), 401
+            
+            # Get initial filters from query params
+            filters = apply_query_filters(request.args)
+            
+            logger.info(f"Urban Vyapari admin accessing tickets portal: {payload['admin_name']}")
+            
+            return render_template('uv_tickets_portal.html', 
+                                 token=token, 
+                                 admin=payload,
+                                 filters=filters)
+                                 
+        except Exception as e:
+            logger.error(f"Error in tickets portal: {str(e)}")
+            return render_template('uv_error.html', error=str(e)), 500
+    
+    logger.info("Urban Vyapari integration endpoints loaded successfully")
+    
+except ImportError as e:
+    logger.warning(f"Urban Vyapari integration not available: {e}")
+
+if __name__ == '__main__':
+    logger.info("Starting YouCloudTech Chatbot Application...")
     try:
         db.create_all()
         logger.info("Database tables created successfully")

@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, jsonify, send_from_directory,
 from flask_login import LoginManager, login_required, current_user, UserMixin
 from flask_babel import Babel, _
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import pyodbc
 import logging
 from config import Config
@@ -276,7 +276,19 @@ class Ticket(db.Model):
     EndDate = db.Column(db.DateTime, nullable=True)  # When ticket was actually resolved/closed
     Country = db.Column(db.String(100), nullable=True)  # Country where ticket originated
     EscalationLevel = db.Column(db.String(20), default='normal')  # normal, supervisor, admin escalation levels
-      # Extended Ticket model fields for enterprise features
+    
+    # Enhanced Escalation Fields
+    EscalationReason = db.Column(db.String(500), nullable=True)  # Reason for escalation
+    EscalationTimestamp = db.Column(db.DateTime, nullable=True)  # When ticket was escalated
+    EscalatedTo = db.Column(db.String(100), nullable=True)  # Role/person ticket was escalated to
+    SLABreachStatus = db.Column(db.String(50), default='Within SLA')  # Within SLA, Approaching Breach, Breached
+    AutoEscalated = db.Column(db.Boolean, default=False)  # Whether escalation was automatic
+    EscalationHistory = db.Column(db.Text, nullable=True)  # JSON history of escalations
+    CurrentAssignedRole = db.Column(db.String(50), default='bot')  # Currently assigned role
+    SLATarget = db.Column(db.DateTime, nullable=True)  # Target SLA completion time
+    OriginalSLATarget = db.Column(db.DateTime, nullable=True)  # Original SLA target (before escalations)
+    
+    # Extended Ticket model fields for enterprise features
     escalation_level = db.Column(db.Integer, default=0)  # 0=Bot, 1=ICP, 2=YouCloud  
     current_sla_target = db.Column(db.DateTime, nullable=True)
     resolution_method = db.Column(db.String(50), nullable=True)  # Bot, ICP, YouCloud
@@ -1013,6 +1025,19 @@ def create_ticket():
         
         # Create ticket with enhanced information
         try:
+            # Calculate initial SLA target
+            sla_hours = {
+                'critical': 1.0,
+                'high': 4.0,
+                'medium': 8.0,
+                'low': 24.0
+            }.get(ticket_priority, 8.0)
+            
+            sla_target = datetime.utcnow() + timedelta(hours=sla_hours)
+            
+            # Set initial role assignment
+            current_role = 'bot'  # All tickets start with bot
+            
             ticket = Ticket(
                 UserID=user.UserID if user else None,
                 CategoryID=category_id,
@@ -1022,11 +1047,17 @@ def create_ticket():
                 OrganizationName=user.OrganizationName if user else data.get('organization', 'Unknown'),
                 CreatedBy=user.Name if user else data.get('name', 'Anonymous'),
                 Country=ticket_country,  # Add country auto-detection
-                EscalationLevel=escalation_level  # Add escalation level auto-detection
+                EscalationLevel=escalation_level,  # Add escalation level auto-detection
+                # Enhanced escalation fields
+                SLABreachStatus='Within SLA',
+                AutoEscalated=False,
+                CurrentAssignedRole=current_role,
+                SLATarget=sla_target,
+                OriginalSLATarget=sla_target
             )
             db.session.add(ticket)
             db.session.flush()  # Get the ID without committing
-            logger.info(f"Created ticket with ID: {ticket.TicketID}, Priority: {ticket_priority}, Organization: {ticket.OrganizationName}")
+            logger.info(f"Created ticket with ID: {ticket.TicketID}, Priority: {ticket_priority}, SLA Target: {sla_target}, Organization: {ticket.OrganizationName}")
         except Exception as e:
             logger.error(f"Error creating ticket: {str(e)}")
             db.session.rollback()
@@ -1646,6 +1677,12 @@ def get_admin_tickets():
                     'organization': user.OrganizationName if user else ticket.OrganizationName or 'Unknown Organization',
                     'priority': ticket.Priority or 'medium',
                     'escalation_level': ticket.EscalationLevel or 'normal',  # Add escalation level
+                    'escalation_reason': ticket.EscalationReason,  # Enhanced escalation info
+                    'escalated_to': ticket.EscalatedTo,
+                    'auto_escalated': ticket.AutoEscalated or False,
+                    'sla_breach_status': ticket.SLABreachStatus or 'Within SLA',
+                    'current_assigned_role': ticket.CurrentAssignedRole or 'bot',
+                    'sla_target': format_timestamp_with_tz(ticket.SLATarget) if ticket.SLATarget else None,
                     'status': ticket.Status,
                     'created_at': format_timestamp_with_tz(ticket.CreatedAt),
                     'updated_at': format_timestamp_with_tz(ticket.UpdatedAt) if ticket.UpdatedAt else format_timestamp_with_tz(ticket.CreatedAt),
@@ -1858,6 +1895,14 @@ def get_admin_ticket_details(ticket_id):
             'user_email': user.Email if user else None,
             'priority': ticket_obj.Priority or 'medium',
             'escalation_level': ticket_obj.EscalationLevel or 'normal',  # Add escalation level
+            'escalation_reason': ticket_obj.EscalationReason,  # Enhanced escalation info
+            'escalated_to': ticket_obj.EscalatedTo,
+            'escalation_timestamp': format_timestamp_with_tz(ticket_obj.EscalationTimestamp) if ticket_obj.EscalationTimestamp else None,
+            'auto_escalated': ticket_obj.AutoEscalated or False,
+            'sla_breach_status': ticket_obj.SLABreachStatus or 'Within SLA',
+            'current_assigned_role': ticket_obj.CurrentAssignedRole or 'bot',
+            'sla_target': format_timestamp_with_tz(ticket_obj.SLATarget) if ticket_obj.SLATarget else None,
+            'original_sla_target': format_timestamp_with_tz(ticket_obj.OriginalSLATarget) if ticket_obj.OriginalSLATarget else None,
             'status': ticket_obj.Status,
             'created_at': format_timestamp_with_tz(ticket_obj.CreatedAt),
             'updated_at': format_timestamp_with_tz(ticket_obj.UpdatedAt) if ticket_obj.UpdatedAt else None,
@@ -2160,322 +2205,269 @@ def get_ticket_details(ticket_id):
         logger.error(f"Error getting ticket details: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
-# FAQ Management API Endpoints
-@app.route('/api/faq-categories', methods=['GET'])
-@admin_required
-def get_faq_categories():
-    """Get all FAQ categories"""
-    try:
-        categories = FAQCategory.query.filter_by(is_active=True).order_by(FAQCategory.sort_order, FAQCategory.name).all()
-        return jsonify([{
-            'id': cat.id,
-            'name': cat.name,
-            'description': cat.description,
-            'icon': cat.icon,
-            'color': cat.color,
-            'sort_order': cat.sort_order,
-            'faq_count': len(cat.faqs) if cat.faqs else 0
-        } for cat in categories])
-    except Exception as e:
-        logger.error(f"Error fetching FAQ categories: {e}")
-        return jsonify({"error": str(e)}), 500
+# ============================================================================
+# ENHANCED ESCALATION API ENDPOINTS
+# ============================================================================
 
-@app.route('/api/faq-categories', methods=['POST'])
+@app.route('/api/tickets/<int:ticket_id>/escalate', methods=['POST'])
 @admin_required
-def create_faq_category():
-    """Create a new FAQ category"""
+def escalate_ticket(ticket_id):
+    """Escalate a ticket with comprehensive tracking"""
     try:
-        data = request.json
-        name = data.get('name', '').strip()
-        description = data.get('description', '').strip()
-        icon = data.get('icon', 'fas fa-question-circle')
-        color = data.get('color', '#007bff')
+        data = request.json or {}
         
-        if not name:
-            return jsonify({"error": "Category name is required"}), 400
-        
-        # Check for duplicate names
-        existing = FAQCategory.query.filter_by(name=name, is_active=True).first()
-        if existing:
-            return jsonify({"error": "Category name already exists"}), 400
-        
-        # Get next sort order
-        max_order = db.session.query(db.func.max(FAQCategory.sort_order)).scalar() or 0
-        
-        category = FAQCategory(
-            name=name,
-            description=description if description else None,
-            icon=icon,
-            color=color,
-            sort_order=max_order + 1
-        )
-        
-        db.session.add(category)
-        db.session.commit()
-        
-        return jsonify({
-            'id': category.id,
-            'name': category.name,
-            'description': category.description,
-            'icon': category.icon,
-            'color': category.color,
-            'sort_order': category.sort_order
-        }), 201
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error creating FAQ category: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/faq-categories/<int:category_id>', methods=['PUT'])
-@admin_required
-def update_faq_category(category_id):
-    """Update an existing FAQ category"""
-    try:
-        category = FAQCategory.query.get_or_404(category_id)
-        data = request.json
-        
-        name = data.get('name', '').strip()
-        if not name:
-            return jsonify({"error": "Category name is required"}), 400
-        
-        # Check for duplicate names (excluding current category)
-        existing = FAQCategory.query.filter(
-            FAQCategory.name == name,
-            FAQCategory.is_active == True,
-            FAQCategory.id != category_id
-        ).first()
-        if existing:
-            return jsonify({"error": "Category name already exists"}), 400
-        
-        category.name = name
-        category.description = data.get('description', '').strip() or None
-        category.icon = data.get('icon', category.icon)
-        category.color = data.get('color', category.color)
-        category.updated_at = datetime.utcnow()
-        
-        db.session.commit()
-        
-        return jsonify({
-            'id': category.id,
-            'name': category.name,
-            'description': category.description,
-            'icon': category.icon,
-            'color': category.color,
-            'sort_order': category.sort_order
-        })
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error updating FAQ category: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/faq-categories/<int:category_id>', methods=['DELETE'])
-@admin_required
-def delete_faq_category(category_id):
-    """Delete an FAQ category"""
-    try:
-        category = FAQCategory.query.get_or_404(category_id)
-        
-        # Check if category has FAQs
-        faq_count = FAQ.query.filter_by(category_id=category_id, is_active=True).count()
-        if faq_count > 0:
-            return jsonify({"error": f"Cannot delete category with {faq_count} active FAQs"}), 400
-        
-        # Soft delete
-        category.is_active = False
-        category.updated_at = datetime.utcnow()
-        
-        db.session.commit()
-        
-        return jsonify({"message": "Category deleted successfully"})
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error deleting FAQ category: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/faqs', methods=['GET'])
-@admin_required
-def get_faqs():
-    """Get FAQs with optional category filter"""
-    try:
-        category_id = request.args.get('category_id', type=int)
-        
-        # Filter by published status and not deleted
-        query = FAQ.query.filter_by(status='published').filter(FAQ.deleted_at.is_(None))
-        if category_id:
-            query = query.filter_by(category_id=category_id)
-        
-        faqs = query.order_by(FAQ.created_at.desc()).all()
-        
-        return jsonify([{
-            'id': faq.id,
-            'category_id': faq.category_id,
-            'category_name': faq.category.name if faq.category else 'Unknown',
-            'question': faq.question,
-            'answer': faq.answer,
-            'language': faq.language_code,            'status': faq.status,
-            'tags': faq.tags,
-            'created_at': format_timestamp_with_tz(faq.created_at) if faq.created_at else None
-        } for faq in faqs])
-    except Exception as e:
-        logger.error(f"Error fetching FAQs: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/faqs', methods=['POST'])
-@admin_required
-def create_faq():
-    """Create a new FAQ"""
-    try:
-        data = request.json
-        category_id = data.get('category_id')
-        question = data.get('question', '').strip()
-        answer = data.get('answer', '').strip()
-        language = data.get('language', 'en')
-        tags = data.get('tags', '').strip()
-        
-        if not all([category_id, question, answer]):
-            return jsonify({"error": "Category ID, question, and answer are required"}), 400
-        
-        # Verify category exists
-        category = FAQCategory.query.filter_by(id=category_id, is_active=True).first()
-        if not category:
-            return jsonify({"error": "Invalid category ID"}), 400
-        
-        faq = FAQ(
-            category_id=category_id,
-            question=question,
-            answer=answer,
-            language_code=language,
-            tags=tags,
-            status='published',
-            created_by=getattr(current_user, 'UserID', None)
-        )
-        
-        db.session.add(faq)
-        db.session.commit()
-        
-        return jsonify({
-            'id': faq.id,
-            'category_id': faq.category_id,
-            'category_name': category.name,            'question': faq.question,
-            'answer': faq.answer,
-            'language': faq.language_code,            'tags': faq.tags,
-            'status': faq.status,
-            'created_at': format_timestamp_with_tz(faq.created_at) if faq.created_at else None
-        }), 201
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error creating FAQ: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/faqs/<int:faq_id>', methods=['PUT'])
-@admin_required
-def update_faq(faq_id):
-    """Update an existing FAQ"""
-    try:
-        faq = FAQ.query.get_or_404(faq_id)
-        data = request.json
-        
-        category_id = data.get('category_id')
-        question = data.get('question', '').strip()
-        answer = data.get('answer', '').strip()
-        
-        if not all([category_id, question, answer]):
-            return jsonify({"error": "Category ID, question, and answer are required"}), 400
-        
-        # Verify category exists
-        category = FAQCategory.query.filter_by(id=category_id, is_active=True).first()
-        if not category:
-            return jsonify({"error": "Invalid category ID"}), 400
-        
-        faq.category_id = category_id
-        faq.question = question
-        faq.answer = answer
-        faq.language = data.get('language', faq.language)
-        faq.updated_at = datetime.utcnow()
-        
-        db.session.commit()
-        
-        return jsonify({
-            'id': faq.id,
-            'category_id': faq.category_id,
-            'category_name': category.name,
-            'question': faq.question,
-            'answer': faq.answer,
-            'language': faq.language,
-            'sort_order': faq.sort_order
-        })
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error updating FAQ: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/faqs/<int:faq_id>', methods=['DELETE'])
-@admin_required
-def delete_faq(faq_id):
-    """Delete an FAQ"""
-    try:
-        faq = FAQ.query.get_or_404(faq_id)
-        
-        # Soft delete        faq.is_active = False
-        faq.updated_at = datetime.utcnow()
-        
-        db.session.commit()
-        return jsonify({"message": "FAQ deleted successfully"})
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error deleting FAQ: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/admin/tickets/<int:ticket_id>', methods=['DELETE'])
-@admin_required
-def delete_ticket(ticket_id):
-    """Delete a ticket and all associated data"""
-    try:
-        logger.info(f"Admin attempting to delete ticket {ticket_id}")
-        
-        # Find the ticket
+        # Get the ticket
         ticket = Ticket.query.get(ticket_id)
         if not ticket:
             return jsonify({"error": "Ticket not found"}), 404
         
-        # Get all messages for this ticket to delete their attachments
-        messages = Message.query.filter_by(TicketID=ticket_id).all()
+        # Get escalation parameters
+        escalation_reason = data.get('escalationReason', 'Manual escalation')
+        escalated_to = data.get('escalatedTo')  # e.g., "supervisor_03", "admin_01"
+        auto_escalated = data.get('autoEscalated', False)
+        new_escalation_level = data.get('escalationLevel', 1)
         
-        # Delete attachments from filesystem and database
-        for message in messages:
-            attachments = Attachment.query.filter_by(MessageID=message.MessageID).all()
-            for attachment in attachments:
-                # Try to delete file from filesystem
-                try:
-                    import os
-                    if attachment.StoredName:
-                        file_path = os.path.join('static/uploads', attachment.StoredName)
-                        if os.path.exists(file_path):
-                            os.remove(file_path)
-                            logger.info(f"Deleted attachment file: {file_path}")
-                except Exception as file_error:
-                    logger.warning(f"Could not delete attachment file {attachment.StoredName}: {file_error}")
-                
-                # Delete attachment record
-                db.session.delete(attachment)
+        # Determine role from escalation level or escalated_to
+        if escalated_to:
+            if 'supervisor' in escalated_to.lower():
+                role = 'supervisor'
+                escalation_level = 'supervisor'
+            elif 'admin' in escalated_to.lower() or 'manager' in escalated_to.lower():
+                role = 'admin'
+                escalation_level = 'admin'
+            else:
+                role = 'supervisor'
+                escalation_level = 'supervisor'
+        else:
+            # Auto-determine based on escalation level
+            if new_escalation_level >= 2:
+                role = 'admin'
+                escalation_level = 'admin'
+                escalated_to = 'admin_auto'
+            else:
+                role = 'supervisor'
+                escalation_level = 'supervisor'
+                escalated_to = 'supervisor_auto'
         
-        # Delete all messages for this ticket
-        Message.query.filter_by(TicketID=ticket_id).delete()
+        # Update ticket escalation fields
+        now = datetime.utcnow()
         
-        # Delete the ticket
-        db.session.delete(ticket)
+        # Create escalation history entry
+        import json
+        escalation_entry = {
+            "ticketId": f"TCK-{ticket_id}",
+            "escalationLevel": new_escalation_level,
+            "escalatedTo": escalated_to,
+            "escalationReason": escalation_reason,
+            "escalationTimestamp": now.isoformat() + "Z",
+            "autoEscalated": auto_escalated,
+            "previousLevel": ticket.EscalationLevel,
+            "previousRole": ticket.CurrentAssignedRole or 'bot'
+        }
+        
+        # Update escalation history
+        if ticket.EscalationHistory:
+            try:
+                history = json.loads(ticket.EscalationHistory)
+            except:
+                history = []
+        else:
+            history = []
+        
+        history.append(escalation_entry)
+        
+        # Update ticket fields
+        ticket.EscalationLevel = escalation_level
+        ticket.EscalationReason = escalation_reason
+        ticket.EscalationTimestamp = now
+        ticket.EscalatedTo = escalated_to
+        ticket.AutoEscalated = auto_escalated
+        ticket.EscalationHistory = json.dumps(history)
+        ticket.CurrentAssignedRole = role
+        ticket.UpdatedAt = now
+        
+        # Update status if needed
+        if ticket.Status == 'open':
+            ticket.Status = 'escalated'
+        
         db.session.commit()
         
-        logger.info(f"Successfully deleted ticket {ticket_id} and all associated data")
+        logger.info(f"Ticket {ticket_id} escalated to {escalation_level} level (role: {role})")
+        
         return jsonify({
-            "status": "success",
-            "message": f"Ticket #{ticket_id} deleted successfully"
+            "success": True,
+            "message": f"Ticket escalated to {escalation_level} level",
+            "escalation": escalation_entry,
+            "ticket": {
+                "id": ticket.TicketID,
+                "escalationLevel": ticket.EscalationLevel,
+                "escalatedTo": ticket.EscalatedTo,
+                "currentAssignedRole": ticket.CurrentAssignedRole,
+                "status": ticket.Status,
+                "slaBreachStatus": ticket.SLABreachStatus
+            }
         })
         
     except Exception as e:
-        logger.error(f"Error deleting ticket {ticket_id}: {str(e)}", exc_info=True)
+        logger.error(f"Error escalating ticket {ticket_id}: {str(e)}")
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+@app.route('/api/tickets/<int:ticket_id>/sla-status', methods=['GET'])
+def get_ticket_sla_status(ticket_id):
+    """Get detailed SLA status for a ticket"""
+    try:
+        ticket = Ticket.query.get(ticket_id)
+        if not ticket:
+            return jsonify({"error": "Ticket not found"}), 404
+        
+        # Calculate SLA status
+        now = datetime.utcnow()
+        sla_status = "Within SLA"
+        time_remaining = None
+        sla_percentage = 0
+        
+        if ticket.SLATarget:
+            time_remaining_seconds = (ticket.SLATarget - now).total_seconds()
+            
+            if ticket.OriginalSLATarget:
+                total_sla_seconds = (ticket.SLATarget - ticket.CreatedAt).total_seconds()
+                elapsed_seconds = (now - ticket.CreatedAt).total_seconds()
+                sla_percentage = min(100, (elapsed_seconds / total_sla_seconds) * 100) if total_sla_seconds > 0 else 0
+            
+            if time_remaining_seconds <= 0:
+                sla_status = "Breached"
+            elif time_remaining_seconds <= 3600:  # 1 hour warning
+                sla_status = "Approaching Breach"
+            else:
+                sla_status = "Within SLA"
+            
+            time_remaining = max(0, time_remaining_seconds)
+        
+        # Update SLA breach status if it has changed
+        if ticket.SLABreachStatus != sla_status:
+            ticket.SLABreachStatus = sla_status
+            db.session.commit()
+        
+        return jsonify({
+            "ticketId": f"TCK-{ticket.TicketID}",
+            "slaBreachStatus": sla_status,
+            "slaTarget": ticket.SLATarget.isoformat() + "Z" if ticket.SLATarget else None,
+            "originalSlaTarget": ticket.OriginalSLATarget.isoformat() + "Z" if ticket.OriginalSLATarget else None,
+            "timeRemainingSeconds": time_remaining,
+            "slaPercentageElapsed": round(sla_percentage, 1),
+            "priority": ticket.Priority,
+            "escalationLevel": ticket.EscalationLevel,
+            "currentAssignedRole": ticket.CurrentAssignedRole,
+            "autoEscalated": ticket.AutoEscalated or False
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting SLA status for ticket {ticket_id}: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/tickets/sla-monitor', methods=['GET'])
+@admin_required
+def get_sla_monitor_dashboard():
+    """Get SLA monitoring dashboard data"""
+    try:
+        # Get tickets approaching SLA breach
+        now = datetime.utcnow()
+        approaching_breach = Ticket.query.filter(
+            Ticket.Status.in_(['open', 'in_progress', 'escalated']),
+            Ticket.SLATarget.isnot(None),
+            Ticket.SLATarget > now,
+            Ticket.SLATarget <= now + timedelta(hours=2)  # Next 2 hours
+        ).all()
+        
+        # Get breached tickets
+        breached = Ticket.query.filter(
+            Ticket.Status.in_(['open', 'in_progress', 'escalated']),
+            Ticket.SLATarget.isnot(None),
+            Ticket.SLATarget <= now
+        ).all()
+        
+        # Get tickets by escalation level
+        escalation_stats = db.session.query(
+            Ticket.EscalationLevel,
+            db.func.count(Ticket.TicketID).label('count')
+        ).filter(
+            Ticket.Status.in_(['open', 'in_progress', 'escalated'])
+        ).group_by(Ticket.EscalationLevel).all()
+        
+        # Format approaching breach tickets
+        approaching_data = []
+        for ticket in approaching_breach:
+            time_remaining = (ticket.SLATarget - now).total_seconds()
+            approaching_data.append({
+                "ticketId": f"TCK-{ticket.TicketID}",
+                "subject": ticket.Subject,
+                "priority": ticket.Priority,
+                "escalationLevel": ticket.EscalationLevel,
+                "timeRemainingMinutes": round(time_remaining / 60),
+                "slaTarget": ticket.SLATarget.isoformat() + "Z"
+            })
+        
+        # Format breached tickets
+        breached_data = []
+        for ticket in breached:
+            time_over = (now - ticket.SLATarget).total_seconds()
+            breached_data.append({
+                "ticketId": f"TCK-{ticket.TicketID}",
+                "subject": ticket.Subject,
+                "priority": ticket.Priority,
+                "escalationLevel": ticket.EscalationLevel,
+                "timeOverMinutes": round(time_over / 60),
+                "slaTarget": ticket.SLATarget.isoformat() + "Z"
+            })
+        
+        return jsonify({
+            "summary": {
+                "approachingBreach": len(approaching_breach),
+                "breached": len(breached),
+                "escalationLevels": {level: count for level, count in escalation_stats}
+            },
+            "approachingBreach": approaching_data,
+            "breached": breached_data,
+            "timestamp": now.isoformat() + "Z"
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting SLA monitor dashboard: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/tickets/<int:ticket_id>/escalation-history', methods=['GET'])
+def get_ticket_escalation_history(ticket_id):
+    """Get escalation history for a ticket"""
+    try:
+        ticket = Ticket.query.get(ticket_id)
+        if not ticket:
+            return jsonify({"error": "Ticket not found"}), 404
+        
+        # Parse escalation history
+        history = []
+        if ticket.EscalationHistory:
+            try:
+                import json
+                history = json.loads(ticket.EscalationHistory)
+            except:
+                history = []
+        
+        return jsonify({
+            "ticketId": f"TCK-{ticket.TicketID}",
+            "currentEscalationLevel": ticket.EscalationLevel,
+            "currentAssignedRole": ticket.CurrentAssignedRole,
+            "escalationHistory": history,
+            "totalEscalations": len(history)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting escalation history for ticket {ticket_id}: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+# ============================================================================
+# END ENHANCED ESCALATION API ENDPOINTS
+# ============================================================================
 
 # Import Bot Service and SLA Monitor
 from bot_service import bot_service

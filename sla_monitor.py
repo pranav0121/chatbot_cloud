@@ -6,7 +6,7 @@ Automated SLA tracking, breach detection, and escalation
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timedelta
 from typing import List, Dict, Optional
 import threading
 import time
@@ -48,6 +48,7 @@ class SLAMonitor:
                     if self._tables_exist():
                         self._check_sla_compliance()
                         self._process_escalations()
+                        self.check_and_auto_escalate_tickets()  # Enhanced auto-escalation
                     else:
                         logger.info("SLA monitoring waiting for database tables to be created...")
                     
@@ -488,6 +489,128 @@ class SLAMonitor:
                 'breached_tickets': 0,
                 'level_statistics': []
             }
+    
+    def check_and_auto_escalate_tickets(self):
+        """Enhanced auto-escalation with comprehensive tracking"""
+        try:
+            from app import db, Ticket
+            import json
+            
+            # Get tickets approaching SLA breach (within 30 minutes) or already breached
+            now = datetime.utcnow()
+            warning_time = now + timedelta(minutes=30)
+            
+            # Find tickets that need escalation
+            tickets_needing_escalation = Ticket.query.filter(
+                Ticket.Status.in_(['open', 'in_progress']),
+                Ticket.SLATarget.isnot(None),
+                db.or_(
+                    Ticket.SLATarget <= warning_time,  # Approaching breach
+                    Ticket.SLATarget <= now  # Already breached
+                )
+            ).filter(
+                # Only escalate tickets that haven't been recently escalated
+                db.or_(
+                    Ticket.EscalationTimestamp.is_(None),
+                    Ticket.EscalationTimestamp <= now - timedelta(hours=1)  # Allow re-escalation after 1 hour
+                )
+            ).all()
+            
+            for ticket in tickets_needing_escalation:
+                self._auto_escalate_ticket(ticket, now)
+            
+            if tickets_needing_escalation:
+                db.session.commit()
+                logger.info(f"Auto-escalated {len(tickets_needing_escalation)} tickets")
+            
+        except Exception as e:
+            logger.error(f"Error in auto-escalation: {e}")
+            try:
+                from app import db
+                db.session.rollback()
+            except:
+                pass
+    
+    def _auto_escalate_ticket(self, ticket, now):
+        """Auto-escalate a single ticket based on SLA and priority"""
+        try:
+            import json
+            
+            # Determine escalation level based on current state and priority
+            current_level = ticket.EscalationLevel or 'normal'
+            escalation_reason = "SLA breach - automatic escalation"
+            
+            # Check if SLA is actually breached
+            if ticket.SLATarget and ticket.SLATarget <= now:
+                ticket.SLABreachStatus = "Breached"
+                escalation_reason = "SLA breached - automatic escalation"
+            elif ticket.SLATarget and ticket.SLATarget <= now + timedelta(minutes=30):
+                ticket.SLABreachStatus = "Approaching Breach"
+                escalation_reason = "SLA approaching breach - automatic escalation"
+            
+            # Determine next escalation level
+            if current_level == 'normal':
+                if ticket.Priority in ['critical', 'high']:
+                    new_level = 'supervisor'
+                    escalated_to = 'supervisor_auto'
+                    role = 'supervisor'
+                else:
+                    new_level = 'supervisor'
+                    escalated_to = 'supervisor_auto'
+                    role = 'supervisor'
+            elif current_level == 'supervisor':
+                new_level = 'admin'
+                escalated_to = 'admin_auto'
+                role = 'admin'
+            else:
+                # Already at admin level, extend SLA instead
+                if ticket.SLATarget:
+                    ticket.SLATarget = ticket.SLATarget + timedelta(hours=2)
+                    escalation_reason = "SLA extended due to admin escalation"
+                return
+            
+            # Create escalation history entry
+            escalation_entry = {
+                "ticketId": f"TCK-{ticket.TicketID}",
+                "escalationLevel": 1 if new_level == 'supervisor' else 2,
+                "escalatedTo": escalated_to,
+                "escalationReason": escalation_reason,
+                "escalationTimestamp": now.isoformat() + "Z",
+                "autoEscalated": True,
+                "previousLevel": current_level,
+                "previousRole": ticket.CurrentAssignedRole or 'bot',
+                "slaBreach": ticket.SLABreachStatus
+            }
+            
+            # Update escalation history
+            if ticket.EscalationHistory:
+                try:
+                    history = json.loads(ticket.EscalationHistory)
+                except:
+                    history = []
+            else:
+                history = []
+            
+            history.append(escalation_entry)
+            
+            # Update ticket
+            ticket.EscalationLevel = new_level
+            ticket.EscalationReason = escalation_reason
+            ticket.EscalationTimestamp = now
+            ticket.EscalatedTo = escalated_to
+            ticket.AutoEscalated = True
+            ticket.EscalationHistory = json.dumps(history)
+            ticket.CurrentAssignedRole = role
+            ticket.UpdatedAt = now
+            
+            # Update status
+            if ticket.Status == 'open':
+                ticket.Status = 'escalated'
+            
+            logger.info(f"Auto-escalated ticket {ticket.TicketID} from {current_level} to {new_level} due to SLA concern")
+            
+        except Exception as e:
+            logger.error(f"Error auto-escalating ticket {ticket.TicketID}: {e}")
 
 # Global SLA monitor instance
 sla_monitor = SLAMonitor()

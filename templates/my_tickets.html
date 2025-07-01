@@ -128,6 +128,14 @@
                                     <strong>{{ ticket.UpdatedAt.strftime('%b %d, %Y') }}</strong>
                                 </div>
                                 {% endif %}
+                                {% if ticket.EndDate %}
+                                <div class="mb-2">
+                                    <small class="text-muted d-block">
+                                        <i class="fas fa-check-circle me-1 text-success"></i>{{ _('Closed') }}
+                                    </small>
+                                    <strong class="text-success">{{ ticket.EndDate.strftime('%b %d, %Y') }}</strong>
+                                </div>
+                                {% endif %}
                                 <div class="btn-group-vertical d-grid gap-1">
                                     <button class="btn btn-outline-primary btn-sm"
                                         onclick="viewTicketDetails({{ ticket.TicketID }})">
@@ -241,6 +249,17 @@
                                     <strong>{{ _('Category') }}:</strong> ${ticket.category || 'Unknown'}
                                 </div>
                             </div>
+                            
+                            ${ticket.updated_at ? `
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <strong>{{ _('Last Updated') }}:</strong> ${new Date(ticket.updated_at).toLocaleDateString()}
+                                </div>
+                                ${ticket.end_date ? `
+                                <div class="col-md-6">
+                                    <strong>{{ _('Closed Date') }}:</strong> <span class="text-success">${new Date(ticket.end_date).toLocaleDateString()}</span>
+                                </div>` : ''}
+                            </div>` : ''}
 
                             ${ticket.messages && ticket.messages.length > 0 ? `
                                 <h6 class="mt-4">{{ _('Recent Messages') }}:</h6>

@@ -269,6 +269,7 @@ class Ticket(db.Model):
     AssignedTo = db.Column(db.Integer, db.ForeignKey('Users.UserID'), nullable=True)  # Admin who handles this
     CreatedAt = db.Column(db.DateTime, default=datetime.utcnow)
     UpdatedAt = db.Column(db.DateTime, default=datetime.utcnow)
+    EndDate = db.Column(db.DateTime, nullable=True)  # When ticket was actually resolved/closed
       # Extended Ticket model fields for enterprise features
     escalation_level = db.Column(db.Integer, default=0)  # 0=Bot, 1=ICP, 2=YouCloud  
     current_sla_target = db.Column(db.DateTime, nullable=True)
@@ -1590,7 +1591,8 @@ def get_admin_tickets():
                     'priority': ticket.Priority or 'medium',
                     'status': ticket.Status,
                     'created_at': format_timestamp_with_tz(ticket.CreatedAt),
-                    'updated_at': format_timestamp_with_tz(ticket.UpdatedAt) if ticket.UpdatedAt else format_timestamp_with_tz(ticket.CreatedAt)
+                    'updated_at': format_timestamp_with_tz(ticket.UpdatedAt) if ticket.UpdatedAt else format_timestamp_with_tz(ticket.CreatedAt),
+                    'end_date': format_timestamp_with_tz(ticket.EndDate) if ticket.EndDate else None
                 }
                 result.append(ticket_data)
                 logger.info(f"Processed ticket {ticket.TicketID}: {ticket.Subject} - Priority: {ticket.Priority}, Org: {ticket_data['organization']}")
@@ -1659,7 +1661,8 @@ def get_admin_tickets():
                         'organization': ticket.OrganizationName or 'Unknown Organization',
                         'priority': ticket.Priority or 'medium',
                         'status': ticket.Status,                        'created_at': format_timestamp_with_tz(ticket.CreatedAt),
-                        'updated_at': format_timestamp_with_tz(ticket.UpdatedAt) if ticket.UpdatedAt else format_timestamp_with_tz(ticket.CreatedAt)
+                        'updated_at': format_timestamp_with_tz(ticket.UpdatedAt) if ticket.UpdatedAt else format_timestamp_with_tz(ticket.CreatedAt),
+                        'end_date': format_timestamp_with_tz(ticket.EndDate) if ticket.EndDate else None
                     })
                 
                 # Apply filters if using Urban Vyapari integration
@@ -1796,6 +1799,8 @@ def get_admin_ticket_details(ticket_id):
             'user_name': user.Name if user else None,            'user_email': user.Email if user else None,
             'status': ticket_obj.Status,
             'created_at': format_timestamp_with_tz(ticket_obj.CreatedAt),
+            'updated_at': format_timestamp_with_tz(ticket_obj.UpdatedAt) if ticket_obj.UpdatedAt else None,
+            'end_date': format_timestamp_with_tz(ticket_obj.EndDate) if ticket_obj.EndDate else None,
             'messages': message_list
         }
         
@@ -1857,6 +1862,13 @@ def update_ticket_status(ticket_id):
         ticket.Status = new_status
         ticket.UpdatedAt = datetime.utcnow()
         
+        # Set EndDate when ticket is resolved or closed
+        if new_status in ['resolved', 'closed'] and old_status not in ['resolved', 'closed']:
+            ticket.EndDate = datetime.utcnow()
+        # Clear EndDate if ticket is reopened from resolved/closed state
+        elif old_status in ['resolved', 'closed'] and new_status not in ['resolved', 'closed']:
+            ticket.EndDate = None
+        
         # If ticket is being resolved or closed, send notification to user
         if new_status in ['resolved', 'closed'] and old_status not in ['resolved', 'closed']:
             # Create a system message to notify the user
@@ -1892,6 +1904,7 @@ def update_ticket_status(ticket_id):
             "status": "success", 
             "message": "Ticket status updated",
             "new_status": new_status,
+            "end_date": format_timestamp_with_tz(ticket.EndDate) if ticket.EndDate else None,
             "notification_sent": new_status in ['resolved', 'closed'] and old_status not in ['resolved', 'closed']
         }
         
@@ -2071,6 +2084,7 @@ def get_ticket_details(ticket_id):
             'user_name': user.Name if user else 'Anonymous',
             'user_email': user.Email if user else 'No email',            'created_at': format_timestamp_with_tz(ticket.CreatedAt),
             'updated_at': format_timestamp_with_tz(ticket.UpdatedAt),
+            'end_date': format_timestamp_with_tz(ticket.EndDate) if ticket.EndDate else None,
             'messages': message_list
         }
         

@@ -277,7 +277,7 @@ async function loadTickets() {
             showNotification(`Tickets error: ${response_data.error || 'Unknown error'}`, 'error');
 
             const tbody = document.getElementById('tickets-tbody');
-            tbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger">
+            tbody.innerHTML = `<tr><td colspan="10" class="text-center text-danger">
                 Error loading tickets: ${response_data.error || 'Unknown error'}
             </td></tr>`;
             return;
@@ -290,7 +290,7 @@ async function loadTickets() {
         const tbody = document.getElementById('tickets-tbody');
         if (!Array.isArray(tickets) || tickets.length === 0) {
             console.log('No tickets found');
-            tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">No tickets found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">No tickets found</td></tr>';
             return;
         }
 
@@ -308,6 +308,7 @@ async function loadTickets() {
                 <td>${ticket.user_name || 'Anonymous'}</td>
                 <td><span class="status-badge status-${ticket.status}">${ticket.status.replace('_', ' ')}</span></td>
                 <td>${formatTime(ticket.created_at)}</td>
+                <td>${ticket.end_date ? `<span class="text-success"><i class="fas fa-check-circle"></i> ${formatTime(ticket.end_date)}</span>` : '<span class="text-muted">-</span>'}</td>
                 <td>
                     <button class="btn btn-sm btn-outline-primary me-1" onclick="viewTicket(${ticket.id})" title="View Details">
                         <i class="fas fa-eye"></i>
@@ -405,6 +406,8 @@ async function viewTicket(ticketId) {
                         <p><strong>User:</strong> ${ticket.user_name || 'Anonymous'}</p>
                         <p><strong>Email:</strong> ${ticket.user_email || 'Not provided'}</p>
                         <p><strong>Created:</strong> ${formatTime(ticket.created_at)}</p>
+                        ${ticket.updated_at ? `<p><strong>Last Updated:</strong> ${formatTime(ticket.updated_at)}</p>` : ''}
+                        ${ticket.end_date ? `<p><strong>End Date:</strong> <span class="text-success">${formatTime(ticket.end_date)}</span></p>` : ''}
                     </div>
                 </div>
                 <div class="ticket-messages">

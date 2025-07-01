@@ -733,3 +733,59 @@ body {
 #delete-ticket-btn {
     margin-right: auto;
 }
+
+/* Device Information Styles */
+.device-info-section {
+    margin-top: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 4px solid #007bff;
+}
+
+.device-info-section h6 {
+    color: #495057;
+    margin-bottom: 15px;
+    font-weight: 600;
+}
+
+.device-info-cell {
+    max-width: 150px;
+    min-width: 120px;
+}
+
+.device-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 0.85em;
+}
+
+.device-summary i {
+    font-size: 16px;
+    margin-bottom: 2px;
+    color: #6c757d;
+}
+
+.browser-info {
+    font-weight: 500;
+    color: #495057;
+}
+
+.os-info {
+    color: #6c757d;
+    font-size: 0.75em;
+}
+
+/* Device type icons */
+.device-summary i.fa-mobile-alt {
+    color: #28a745;
+}
+
+.device-summary i.fa-tablet-alt {
+    color: #ffc107;
+}
+
+.device-summary i.fa-desktop {
+    color: #007bff;
+}

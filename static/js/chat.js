@@ -9,9 +9,89 @@ let messageRefreshInterval = null;
 let isOfflineMode = false;
 let offlineTickets = [];
 
+// Device tracking integration
+let deviceContext = null;
+let deviceTracker = null;
+
 // Debug mode
 let debugMode = true; // Set to true for detailed logging
 let errorLog = [];
+
+// Initialize device tracking for chat
+function initializeDeviceTracking() {
+    try {
+        // Check if device tracker is available
+        if (typeof window.deviceTracker !== 'undefined') {
+            deviceTracker = window.deviceTracker;
+            deviceContext = deviceTracker.getDeviceContext();
+            
+            console.log('✅ Device tracking initialized for chat');
+            console.log('📱 Device context:', deviceContext);
+            
+            // Track chat widget initialization
+            deviceTracker.trackChatEvent('widget_initialized', {
+                url: window.location.pathname,
+                referrer: document.referrer
+            });
+            
+            // Check for compatibility warnings and show to user if needed
+            const warnings = deviceTracker.getCompatibilityWarnings();
+            if (warnings.length > 0) {
+                handleDeviceCompatibilityWarnings(warnings);
+            }
+            
+            return true;
+        } else {
+            console.warn('⚠️ Device tracker not available, falling back to basic info');
+            // Fallback device info collection
+            deviceContext = collectBasicDeviceInfo();
+            return false;
+        }
+    } catch (error) {
+        console.error('❌ Error initializing device tracking:', error);
+        deviceContext = collectBasicDeviceInfo();
+        return false;
+    }
+}
+
+// Fallback device info collection without device tracker
+function collectBasicDeviceInfo() {
+    return {
+        userAgent: navigator.userAgent,
+        platform: navigator.platform,
+        language: navigator.language,
+        screenWidth: screen.width,
+        screenHeight: screen.height,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        deviceType: getBasicDeviceType(),
+        timestamp: new Date().toISOString()
+    };
+}
+
+// Basic device type detection
+function getBasicDeviceType() {
+    const ua = navigator.userAgent.toLowerCase();
+    if (/mobile|android|iphone|ipod/.test(ua)) return 'mobile';
+    if (/ipad|tablet/.test(ua)) return 'tablet';
+    return 'desktop';
+}
+
+// Handle device compatibility warnings
+function handleDeviceCompatibilityWarnings(warnings) {
+    const criticalWarnings = warnings.filter(w => w.type === 'error');
+    
+    if (criticalWarnings.length > 0) {
+        // Show critical compatibility issues to user
+        setTimeout(() => {
+            showNotification(
+                criticalWarnings[0].message, 
+                'warning', 
+                8000
+            );
+        }, 2000);
+    }
+}
 
 // Enhanced error logging
 function logError(context, error, data = null) {
@@ -63,9 +143,15 @@ window.debugChat = {
 // Initialize when document is ready
 document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM loaded, initializing chat system...');
+    
+    // Initialize device tracking first
+    initializeDeviceTracking();
+    
     loadCategories();
     loadQuickCategories();
-    setupEventListeners();    // Initialize Socket.IO for real-time chat
+    setupEventListeners();
+    
+    // Initialize Socket.IO for real-time chat
     window.chatSocket = io();
     let reconnecting = false;
 
@@ -103,6 +189,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Test API connectivity
     testApiConnection();
+
+    // Initialize device tracking
+    initializeDeviceTracking();
 });
 
 let lastJoinedTicketId = null;
@@ -321,6 +410,15 @@ function openSupportChat() {
 
     chatWidget.classList.add('active');
     fabContainer.style.display = 'none';
+
+    // Track chat opening with device info
+    if (deviceTracker) {
+        deviceTracker.trackChatEvent('opened', {
+            page: window.location.pathname,
+            referrer: document.referrer,
+            device_context: deviceContext
+        });
+    }
 
     // Show welcome screen
     showWelcomeScreen();
@@ -617,7 +715,9 @@ async function createTicketWithMessage(message) {
             email: currentUser?.email || '',
             category_id: categoryId,
             subject: `${categoryName} Support Request`,
-            message: message
+            message: message,
+            // Add device information to ticket creation
+            device_info: deviceContext || collectBasicDeviceInfo()
         };
 
         if (debugMode) {
@@ -668,6 +768,11 @@ async function createTicketWithMessage(message) {
                 if (debugMode) {
                     console.log('Updated currentUser with ID:', currentUser.id);
                 }
+            }
+
+            // Track successful ticket creation with device info
+            if (deviceTracker) {
+                deviceTracker.trackTicketCreation(data.ticket_id, categoryId);
             }
 
             showNotification('Ticket created successfully!', 'success');

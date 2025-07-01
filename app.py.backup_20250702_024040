@@ -16,14 +16,17 @@ from sqlalchemy.sql import case
 from functools import wraps
 import warnings
 
-# Device Tracking Imports
-from device_tracker_core import DeviceInfo, DeviceAnalytics
-
 # Odoo Integration
 from odoo_service import OdooService
 
 # Location service for country detection
 from location_service import location_service
+
+# Device tracking service
+from device_tracker import device_tracker
+
+# Bot service for automated responses
+from bot_service import bot_service
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -242,18 +245,6 @@ class User(UserMixin, db.Model):
     IsAdmin = db.Column(db.Boolean, default=False)
     LastLogin = db.Column(db.DateTime, nullable=True)
     CreatedAt = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # Device Tracking fields
-    device_type = db.Column(db.String(20), nullable=True)  # desktop, mobile, tablet
-    operating_system = db.Column(db.String(50), nullable=True)  # Windows, macOS, Android, iOS
-    browser = db.Column(db.String(50), nullable=True)  # Chrome, Firefox, Safari, Edge
-    browser_version = db.Column(db.String(50), nullable=True)  # Browser version string
-    os_version = db.Column(db.String(50), nullable=True)  # OS version string
-    device_brand = db.Column(db.String(50), nullable=True)  # Apple, Samsung, etc.
-    device_model = db.Column(db.String(50), nullable=True)  # iPhone 12, Galaxy S21, etc.
-    device_fingerprint = db.Column(db.String(255), nullable=True)  # Unique device identifier
-    user_agent = db.Column(db.Text, nullable=True)  # Full user agent string
-    ip_address = db.Column(db.String(45), nullable=True)  # IPv4 or IPv6 address
 
     def get_id(self):
         return str(self.UserID)
@@ -314,17 +305,17 @@ class Ticket(db.Model):
     odoo_customer_id = db.Column(db.Integer, nullable=True)  # Odoo partner ID
     odoo_ticket_id = db.Column(db.Integer, nullable=True)  # Odoo helpdesk ticket ID
     
-    # Device Tracking fields
-    device_type = db.Column(db.String(20), nullable=True)  # desktop, mobile, tablet
-    operating_system = db.Column(db.String(50), nullable=True)  # Windows, macOS, Android, iOS
-    browser = db.Column(db.String(50), nullable=True)  # Chrome, Firefox, Safari, Edge
-    browser_version = db.Column(db.String(50), nullable=True)  # Browser version string
-    os_version = db.Column(db.String(50), nullable=True)  # OS version string
-    device_brand = db.Column(db.String(50), nullable=True)  # Apple, Samsung, etc.
-    device_model = db.Column(db.String(50), nullable=True)  # iPhone 12, Galaxy S21, etc.
+    # Device Tracking Fields
+    device_type = db.Column(db.String(20), nullable=True)  # mobile, tablet, desktop, bot
+    operating_system = db.Column(db.String(50), nullable=True)  # iOS, Android, Windows, macOS, Linux
+    browser = db.Column(db.String(50), nullable=True)  # Chrome, Safari, Firefox, Edge
+    browser_version = db.Column(db.String(50), nullable=True)  # Browser version
+    os_version = db.Column(db.String(50), nullable=True)  # OS version
+    device_brand = db.Column(db.String(50), nullable=True)  # Apple, Samsung, Google, etc.
+    device_model = db.Column(db.String(100), nullable=True)  # iPhone, Galaxy S23, etc.
     device_fingerprint = db.Column(db.String(255), nullable=True)  # Unique device identifier
     user_agent = db.Column(db.Text, nullable=True)  # Full user agent string
-    ip_address = db.Column(db.String(45), nullable=True)  # IPv4 or IPv6 address
+    ip_address = db.Column(db.String(45), nullable=True)  # IP address when ticket was created
 
     # Relationships
     user = db.relationship('User', foreign_keys=[UserID], backref='tickets')
@@ -349,6 +340,11 @@ class Message(db.Model):
     IsAdminReply = db.Column(db.Boolean, default=False)
     IsBotResponse = db.Column(db.Boolean, default=False)
     CreatedAt = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Device Tracking Fields for messages
+    device_type = db.Column(db.String(20), nullable=True)  # mobile, tablet, desktop, bot
+    user_agent = db.Column(db.Text, nullable=True)  # User agent for this specific message
+    ip_address = db.Column(db.String(45), nullable=True)  # IP address when message was sent
 
 class CommonQuery(db.Model):
     __tablename__ = 'CommonQueries'
@@ -1091,7 +1087,7 @@ def create_ticket():
             return jsonify({
                 'status': 'error',
                 'message': 'Error creating ticket'
-            }, 500)
+            }), 500
         
         # Create initial message
         try:
@@ -1110,7 +1106,7 @@ def create_ticket():
             return jsonify({
                 'status': 'error',
                 'message': 'Error creating message'
-            }, 500)
+            }), 500
         # Try bot response first (Level 0 automation)
         bot_response = None
         bot_attempted = False
@@ -1192,41 +1188,7 @@ def create_ticket():
         try:
             sla_monitor.set_initial_sla(ticket)
         except Exception as e:
-            logger.error(f"Error setting initial SLA: {str(e)}")
-        
-        # Capture device tracking information
-        try:
-            # Extract device info from Flask request
-            user_agent = request.headers.get('User-Agent', '')
-            ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
-            
-            # Create DeviceInfo instance with extracted data
-            device_info = DeviceInfo(user_agent_string=user_agent, ip_address=ip_address)
-            device_data = device_info.get_complete_info()
-            
-            # Add device info to ticket
-            if device_data:
-                browser_info = device_data.get('browser', {})
-                os_info = device_data.get('os', {})
-                
-                ticket.device_type = device_data.get('device_type')
-                ticket.operating_system = os_info.get('family') if os_info else None
-                ticket.browser = browser_info.get('family') if browser_info else None
-                ticket.browser_version = browser_info.get('version_string') if browser_info else None
-                ticket.os_version = os_info.get('version_string') if os_info else None
-                ticket.device_brand = None  # Not available in simple parser
-                ticket.device_model = None  # Not available in simple parser
-                ticket.device_fingerprint = f"{device_data.get('device_type')}_{browser_info.get('family', 'unknown')}_{os_info.get('family', 'unknown')}" if browser_info and os_info else None
-                ticket.user_agent = device_data.get('user_agent')
-                ticket.ip_address = device_data.get('ip_address')
-                
-                logger.info(f"Device info captured for ticket {ticket.TicketID}: {device_data.get('device_type')} / {browser_info.get('family') if browser_info else 'Unknown'} / {os_info.get('family') if os_info else 'Unknown'}")
-            else:
-                logger.warning(f"No device data available for ticket {ticket.TicketID}")
-        except Exception as e:
-            logger.error(f"Device tracking failed for ticket {ticket.TicketID}: {e}")
-        
-        # Commit all changes
+            logger.error(f"Error setting initial SLA: {str(e)}")        # Commit all changes
         try:
             db.session.commit()
             logger.info(f"Successfully committed ticket {ticket.TicketID}")
@@ -1236,7 +1198,7 @@ def create_ticket():
             return jsonify({
                 'status': 'error',
                 'message': 'Error saving ticket'
-            }, 500)
+            }), 500
         
         logger.info(f"Successfully created ticket {ticket.TicketID} for organization {ticket.OrganizationName}")
         
@@ -1888,9 +1850,6 @@ def get_admin_tickets():
             'success': False,
             'error': 'Failed to fetch tickets',
             'tickets': [],
-            'pagination': {
-                'total': 0,
-                'limit': 50,
                 'offset': 0,
                 'has_more': False
             }
@@ -1988,7 +1947,7 @@ def get_active_conversations():
             User, Ticket.UserID == User.UserID, isouter=True
         ).join(
             Category, Ticket.CategoryID == Category.CategoryID
-        ).filter(Ticket.Status.in_(['open', 'in_progress', 'escalated'])).order_by(Ticket.UpdatedAt.desc()).all()
+        ).filter(Ticket.Status.in_(['open', 'in_progress'])).order_by(Ticket.UpdatedAt.desc()).all()
         
         result = []
         for ticket, user, category in conversations:

@@ -277,7 +277,7 @@ async function loadTickets() {
             showNotification(`Tickets error: ${response_data.error || 'Unknown error'}`, 'error');
 
             const tbody = document.getElementById('tickets-tbody');
-            tbody.innerHTML = `<tr><td colspan="11" class="text-center text-danger">
+            tbody.innerHTML = `<tr><td colspan="12" class="text-center text-danger">
                 Error loading tickets: ${response_data.error || 'Unknown error'}
             </td></tr>`;
             return;
@@ -290,7 +290,7 @@ async function loadTickets() {
         const tbody = document.getElementById('tickets-tbody');
         if (!Array.isArray(tickets) || tickets.length === 0) {
             console.log('No tickets found');
-            tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">No tickets found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="12" class="text-center text-muted">No tickets found</td></tr>';
             return;
         }
 
@@ -307,6 +307,16 @@ async function loadTickets() {
                 </td>
                 <td>${ticket.category || 'Unknown'}</td>
                 <td>${ticket.user_name || 'Anonymous'}</td>
+                <td class="device-info-cell">
+                    ${ticket.device_type || ticket.browser || ticket.operating_system ? 
+                        `<div class="device-summary">
+                            ${ticket.device_type ? `<i class="fas fa-${ticket.device_type === 'mobile' ? 'mobile-alt' : ticket.device_type === 'tablet' ? 'tablet-alt' : 'desktop'}" title="${ticket.device_type}"></i>` : ''}
+                            ${ticket.browser ? `<span class="browser-info" title="${ticket.browser} ${ticket.browser_version || ''}">${ticket.browser}</span>` : ''}
+                            ${ticket.operating_system ? `<small class="os-info" title="${ticket.operating_system} ${ticket.os_version || ''}">${ticket.operating_system}</small>` : ''}
+                        </div>` : 
+                        '<span class="text-muted">No device info</span>'
+                    }
+                </td>
                 <td><span class="status-badge status-${ticket.status}">${ticket.status.replace('_', ' ')}</span></td>
                 <td>${formatTime(ticket.created_at)}</td>
                 <td>${ticket.end_date ? `<span class="text-success"><i class="fas fa-check-circle"></i> ${formatTime(ticket.end_date)}</span>` : '<span class="text-muted">-</span>'}</td>
@@ -415,6 +425,24 @@ async function viewTicket(ticketId) {
                         ${ticket.end_date ? `<p><strong>End Date:</strong> <span class="text-success">${formatTime(ticket.end_date)}</span></p>` : ''}
                     </div>
                 </div>
+                ${ticket.device_type || ticket.browser || ticket.operating_system ? `
+                <div class="device-info-section">
+                    <h6><i class="fas fa-laptop"></i> Device Information</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            ${ticket.device_type ? `<p><strong>Device Type:</strong> <i class="fas fa-${ticket.device_type === 'mobile' ? 'mobile-alt' : ticket.device_type === 'tablet' ? 'tablet-alt' : 'desktop'}"></i> ${ticket.device_type}</p>` : ''}
+                            ${ticket.browser ? `<p><strong>Browser:</strong> ${ticket.browser} ${ticket.browser_version ? `v${ticket.browser_version}` : ''}</p>` : ''}
+                            ${ticket.operating_system ? `<p><strong>Operating System:</strong> ${ticket.operating_system} ${ticket.os_version ? `v${ticket.os_version}` : ''}</p>` : ''}
+                        </div>
+                        <div class="col-md-6">
+                            ${ticket.device_brand ? `<p><strong>Device Brand:</strong> ${ticket.device_brand}</p>` : ''}
+                            ${ticket.device_model ? `<p><strong>Device Model:</strong> ${ticket.device_model}</p>` : ''}
+                            ${ticket.ip_address ? `<p><strong>IP Address:</strong> <code>${ticket.ip_address}</code></p>` : ''}
+                            ${ticket.device_fingerprint ? `<p><strong>Device ID:</strong> <small><code>${ticket.device_fingerprint.substring(0, 16)}...</code></small></p>` : ''}
+                        </div>
+                    </div>
+                </div>
+                ` : ''}
                 <div class="ticket-messages">
                     <h6>Messages:</h6>
                     ${ticket.messages.map(msg => {

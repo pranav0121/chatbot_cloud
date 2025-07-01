@@ -2,6 +2,9 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_user, login_required, logout_user
 from werkzeug.security import generate_password_hash, check_password_hash
 
+# Device Tracking Import
+from device_tracker_core import DeviceInfo
+
 # Define auth blueprint
 auth_bp = Blueprint('auth', __name__)
 
@@ -30,6 +33,34 @@ def login():
         
         # Update last login time
         user.LastLogin = datetime.utcnow()
+        
+        # 🔥 NEW: Capture device tracking information for login
+        try:
+            # Extract device info from Flask request
+            user_agent = request.headers.get('User-Agent', '')
+            ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
+            
+            # Create DeviceInfo instance
+            device_info = DeviceInfo(user_agent_string=user_agent, ip_address=ip_address)
+            device_data = device_info.get_complete_info()
+            
+            if device_data:
+                browser_info = device_data.get('browser', {})
+                os_info = device_data.get('os', {})
+                
+                user.device_type = device_data.get('device_type')
+                user.operating_system = os_info.get('family') if os_info else None
+                user.browser = browser_info.get('family') if browser_info else None
+                user.browser_version = browser_info.get('version_string') if browser_info else None
+                user.os_version = os_info.get('version_string') if os_info else None
+                user.device_brand = None  # Not available in simple parser
+                user.device_model = None  # Not available in simple parser
+                user.device_fingerprint = f"{device_data.get('device_type')}_{browser_info.get('family', 'unknown')}_{os_info.get('family', 'unknown')}" if browser_info and os_info else None
+                user.user_agent = device_data.get('user_agent')
+                user.ip_address = device_data.get('ip_address')
+        except Exception as e:
+            print(f"Warning: Could not capture device info for user {user.Email}: {e}")
+        
         try:
             db.session.commit()
         except:
@@ -87,6 +118,33 @@ def register():
             Phone=phone,
             PriorityLevel=priority
         )
+        
+        # 🔥 NEW: Capture device tracking information for registration
+        try:
+            # Extract device info from Flask request
+            user_agent = request.headers.get('User-Agent', '')
+            ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
+            
+            # Create DeviceInfo instance
+            device_info = DeviceInfo(user_agent_string=user_agent, ip_address=ip_address)
+            device_data = device_info.get_complete_info()
+            
+            if device_data:
+                browser_info = device_data.get('browser', {})
+                os_info = device_data.get('os', {})
+                
+                new_user.device_type = device_data.get('device_type')
+                new_user.operating_system = os_info.get('family') if os_info else None
+                new_user.browser = browser_info.get('family') if browser_info else None
+                new_user.browser_version = browser_info.get('version_string') if browser_info else None
+                new_user.os_version = os_info.get('version_string') if os_info else None
+                new_user.device_brand = None  # Not available in simple parser
+                new_user.device_model = None  # Not available in simple parser
+                new_user.device_fingerprint = f"{device_data.get('device_type')}_{browser_info.get('family', 'unknown')}_{os_info.get('family', 'unknown')}" if browser_info and os_info else None
+                new_user.user_agent = device_data.get('user_agent')
+                new_user.ip_address = device_data.get('ip_address')
+        except Exception as e:
+            print(f"Warning: Could not capture device info for new user {email}: {e}")
         
         try:
             db.session.add(new_user)

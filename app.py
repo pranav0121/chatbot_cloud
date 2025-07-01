@@ -538,6 +538,12 @@ def register_super_admin_blueprint():
     from super_admin import super_admin_bp
     app.register_blueprint(super_admin_bp)
 
+# Test route for ticket loading
+@app.route('/test-tickets')
+def test_tickets_page():
+    """Test page for ticket loading functionality"""
+    return render_template('test_tickets_loading.html')
+
 # Enhanced admin route for backwards compatibility
 @app.route('/admin')
 @admin_required

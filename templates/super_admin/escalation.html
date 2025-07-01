@@ -294,29 +294,48 @@
         async function loadEscalationData() {
             try {
                 const response = await fetch('/super-admin/api/escalation/dashboard');
-                escalationData = await response.json();
-                filteredData = [...escalationData];
-
-                updateSLAOverview();
-                renderEscalationTickets();
+                const data = await response.json();
+                
+                // Handle the response structure properly
+                if (data.tickets) {
+                    escalationData = data.tickets;
+                    filteredData = [...escalationData];
+                    
+                    // Update the SLA overview with the summary data
+                    document.getElementById('tickets-green').textContent = data.within_sla || 0;
+                    document.getElementById('tickets-yellow').textContent = data.sla_warning || 0;
+                    document.getElementById('tickets-red').textContent = data.sla_breached || 0;
+                    
+                    const totalTickets = escalationData.length;
+                    const compliance = totalTickets > 0 ? Math.round((data.within_sla / totalTickets) * 100) : 100;
+                    document.getElementById('avg-compliance').textContent = compliance + '%';
+                    
+                    renderEscalationTickets();
+                } else {
+                    console.warn('No tickets data in response:', data);
+                    escalationData = [];
+                    filteredData = [];
+                    updateSLAOverview();
+                    renderEscalationTickets();
+                }
             } catch (error) {
                 console.error('Error loading escalation data:', error);
                 showNotification('Error loading escalation data', 'error');
+                
+                // Set fallback data
+                escalationData = [];
+                filteredData = [];
+                updateSLAOverview();
+                renderEscalationTickets();
             }
         }
 
         function updateSLAOverview() {
-            const greenTickets = escalationData.filter(t => t.sla_status === 'green').length;
-            const yellowTickets = escalationData.filter(t => t.sla_status === 'orange').length;
-            const redTickets = escalationData.filter(t => t.sla_status === 'red').length;
-            const totalTickets = escalationData.length;
-
-            const compliance = totalTickets > 0 ? Math.round((greenTickets / totalTickets) * 100) : 100;
-
-            document.getElementById('tickets-green').textContent = greenTickets;
-            document.getElementById('tickets-yellow').textContent = yellowTickets;
-            document.getElementById('tickets-red').textContent = redTickets;
-            document.getElementById('avg-compliance').textContent = compliance + '%';
+            // Set fallback values when no data is available
+            document.getElementById('tickets-green').textContent = '0';
+            document.getElementById('tickets-yellow').textContent = '0';
+            document.getElementById('tickets-red').textContent = '0';
+            document.getElementById('avg-compliance').textContent = '100%';
         }
 
         function renderEscalationTickets() {
@@ -384,6 +403,22 @@
                                     <small class="text-muted">Created by:</small>
                                     ${ticket.created_by}
                                 </div>
+                                <div class="mb-2">
+                                    <small class="text-muted">Escalation:</small>
+                                    <span class="badge bg-${getEscalationColor(ticket.escalation_level)}">${ticket.level_name}</span>
+                                </div>
+                                ${ticket.partner ? `
+                                <div class="mb-2">
+                                    <small class="text-muted">Assigned to:</small>
+                                    <strong class="text-success">${ticket.partner.name}</strong>
+                                    <small class="text-muted">(${ticket.partner.type})</small>
+                                </div>
+                                ` : `
+                                <div class="mb-2">
+                                    <small class="text-muted">Assignment:</small>
+                                    <span class="text-warning">⚠ Unassigned</span>
+                                </div>
+                                `}
                                 <div class="mb-3">
                                     <small class="text-muted">Created:</small>
                                     ${new Date(ticket.created_at).toLocaleString()}
@@ -427,6 +462,15 @@
                 case 'high': return 'warning';
                 case 'medium': return 'info';
                 case 'low': return 'success';
+                default: return 'secondary';
+            }
+        }
+
+        function getEscalationColor(level) {
+            switch (level) {
+                case 0: return 'primary';    // Bot
+                case 1: return 'warning';    // ICP
+                case 2: return 'danger';     // YouCloud
                 default: return 'secondary';
             }
         }

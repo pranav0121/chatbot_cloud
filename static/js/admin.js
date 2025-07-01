@@ -268,25 +268,29 @@ async function loadTickets() {
             throw new Error(`HTTP ${response.status}: ${errorText}`);
         }
 
-        const tickets = await response.json();
-        console.log('Tickets received:', tickets);
+        const response_data = await response.json();
+        console.log('Tickets response received:', response_data);
 
         // Check if response has error
-        if (tickets.error) {
-            console.error('Tickets error:', tickets.error);
-            showNotification(`Tickets error: ${tickets.error}`, 'error');
+        if (response_data.error || !response_data.success) {
+            console.error('Tickets error:', response_data.error);
+            showNotification(`Tickets error: ${response_data.error || 'Unknown error'}`, 'error');
 
             const tbody = document.getElementById('tickets-tbody');
-            tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">
-                Error loading tickets: ${tickets.error}
+            tbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger">
+                Error loading tickets: ${response_data.error || 'Unknown error'}
             </td></tr>`;
             return;
         }
 
+        // Extract tickets array from response
+        const tickets = response_data.tickets || [];
+        console.log(`Extracted ${tickets.length} tickets from response`);
+
         const tbody = document.getElementById('tickets-tbody');
         if (!Array.isArray(tickets) || tickets.length === 0) {
             console.log('No tickets found');
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No tickets found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">No tickets found</td></tr>';
             return;
         }
 
@@ -325,7 +329,7 @@ async function loadTickets() {
         showNotification('Failed to load tickets. Please check the server connection.', 'error');
 
         const tbody = document.getElementById('tickets-tbody');
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">
+        tbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger">
             Failed to load tickets: ${error.message}
         </td></tr>`;
     }

@@ -278,12 +278,18 @@ class SLAMonitor:
         # - SMS alerts for critical issues
     
     def _notify_partner_escalation(self, ticket, sla_log):
-        """Notify partners about escalated tickets"""
+        """Notify partners about escalated tickets and assign them"""
         from models import Partner
         
         try:
             # Find appropriate partner for this escalation level
-            partner_type = 'ICP' if sla_log.escalation_level == 1 else 'YCP'
+            if sla_log.escalation_level == 1:
+                partner_type = 'ICP'
+            elif sla_log.escalation_level == 2:
+                partner_type = 'YCP'
+            else:
+                logger.warning(f"Unknown escalation level: {sla_log.escalation_level}")
+                return
             
             partners = Partner.query.filter_by(
                 partner_type=partner_type,
@@ -298,16 +304,41 @@ class SLAMonitor:
                 # Update ticket with partner assignment
                 from app import db, Ticket
                 ticket_obj = Ticket.query.get(ticket.TicketID)
-                ticket_obj.partner_id = partner.id
-                
-                # Send webhook notification if configured
-                if partner.webhook_url:
-                    self._send_webhook_notification(partner, ticket, sla_log)
-                
+                if ticket_obj:
+                    ticket_obj.partner_id = partner.id
+                    ticket_obj.UpdatedAt = datetime.utcnow()
+                    
+                    # Update SLA log with partner assignment
+                    sla_log.assigned_partner_id = partner.id
+                    sla_log.status = 'assigned'
+                    
+                    # Update partner statistics
+                    partner.total_tickets_handled = (partner.total_tickets_handled or 0) + 1
+                    partner.updated_at = datetime.utcnow()
+                    
+                    # Send webhook notification if configured
+                    if partner.webhook_url:
+                        try:
+                            self._send_webhook_notification(partner, ticket_obj, sla_log)
+                        except Exception as webhook_error:
+                            logger.warning(f"Webhook notification failed: {webhook_error}")
+                    
+                    db.session.commit()
+                    
+                    logger.info(f"Ticket {ticket.TicketID} escalated to level {sla_log.escalation_level} and assigned to {partner.name}")
+                else:
+                    logger.error(f"Could not find ticket {ticket.TicketID} for partner assignment")
+            else:
+                logger.warning(f"No active {partner_type} partners available for escalation level {sla_log.escalation_level}")
+                # Update SLA log to show unassigned status
+                sla_log.status = 'unassigned'
+                from app import db
                 db.session.commit()
                 
         except Exception as e:
             logger.error(f"Error notifying partner: {e}")
+            import traceback
+            traceback.print_exc()
     
     def _send_webhook_notification(self, partner, ticket, sla_log):
         """Send webhook notification to partner"""

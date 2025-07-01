@@ -190,10 +190,18 @@
                     </div>
                     <div class="col-md-2">
                         <div class="quick-action-card"
+                            onclick="window.location.href='{{ url_for('super_admin.sla_dashboard') }}'">
+                            <i class="fas fa-clock fa-3x text-info mb-3"></i>
+                            <h6>SLA Dashboard</h6>
+                            <p class="text-muted small">Monitor SLA compliance</p>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="quick-action-card"
                             onclick="window.location.href='{{ url_for('super_admin.escalation_dashboard') }}'">
                             <i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i>
                             <h6>View Escalations</h6>
-                            <p class="text-muted small">Monitor SLA compliance</p>
+                            <p class="text-muted small">Ticket escalation management</p>
                         </div>
                     </div>
                     <div class="col-md-2">
@@ -352,35 +360,50 @@
                 const response = await fetch('/super-admin/api/dashboard/metrics');
                 const data = await response.json();
 
-                document.getElementById('total-active-tickets').textContent = data.activeTickets || 0;
-                document.getElementById('sla-breaches').textContent = data.slaBreaches || 0;
-                document.getElementById('active-partners').textContent = data.activePartners || 0;
-                document.getElementById('bot-interactions').textContent = data.botInteractions || 0;
+                if (data.success) {
+                    // Use correct property names from the API
+                    document.getElementById('total-active-tickets').textContent = data.activeTickets || 0;
+                    document.getElementById('sla-breaches').textContent = data.slaBreaches || 0;
+                    document.getElementById('active-partners').textContent = data.activePartners || 0;
+                    document.getElementById('bot-interactions').textContent = data.botInteractions || 0;
+                } else {
+                    console.warn('Dashboard metrics response not successful:', data);
+                    // Set safe fallback values
+                    document.getElementById('total-active-tickets').textContent = '0';
+                    document.getElementById('sla-breaches').textContent = '0';
+                    document.getElementById('active-partners').textContent = '0';
+                    document.getElementById('bot-interactions').textContent = '0';
+                }
             } catch (error) {
                 console.error('Error loading dashboard metrics:', error);
+                // Set safe fallback values
+                document.getElementById('total-active-tickets').textContent = '0';
+                document.getElementById('sla-breaches').textContent = '0';
+                document.getElementById('active-partners').textContent = '0';
+                document.getElementById('bot-interactions').textContent = '0';
             }
         }
 
         async function loadCriticalAlerts() {
             try {
-                const response = await fetch('/super-admin/api/alerts/critical');
-                const alerts = await response.json();
+                const response = await fetch('/super-admin/api/critical-alerts');
+                const data = await response.json();
 
                 const container = document.getElementById('critical-alerts');
-                if (alerts.length === 0) {
-                    container.innerHTML = '<div class="text-center text-success"><i class="fas fa-check-circle"></i> No critical alerts</div>';
-                } else {
-                    container.innerHTML = alerts.map(alert => `
-                        <div class="alert alert-danger mb-2">
-                            <i class="fas fa-exclamation-triangle"></i>
-                            <strong>${alert.title}</strong><br>
-                            <small>${alert.description}</small>
+                if (data.success && data.alerts && data.alerts.length > 0) {
+                    container.innerHTML = data.alerts.map(alert => `
+                        <div class="alert alert-${alert.severity === 'high' ? 'danger' : alert.severity === 'medium' ? 'warning' : 'info'} mb-2">
+                            <i class="fas fa-${alert.severity === 'high' ? 'exclamation-triangle' : alert.severity === 'medium' ? 'exclamation-circle' : 'info-circle'}"></i>
+                            ${alert.message}
                         </div>
                     `).join('');
+                } else {
+                    container.innerHTML = '<div class="text-center text-success"><i class="fas fa-check-circle"></i> No critical alerts</div>';
                 }
             } catch (error) {
                 console.error('Error loading critical alerts:', error);
-                document.getElementById('critical-alerts').innerHTML = '<div class="text-danger">Error loading alerts</div>';
+                const container = document.getElementById('critical-alerts');
+                container.innerHTML = '<div class="text-center text-muted"><i class="fas fa-exclamation-triangle"></i> Unable to load alerts</div>';
             }
         }
 
@@ -411,25 +434,33 @@
                 const response = await fetch('/super-admin/api/sla/overview');
                 const data = await response.json();
 
-                const tbody = document.getElementById('sla-overview-table');
-                tbody.innerHTML = data.map(level => `
-                    <tr>
-                        <td>
-                            <span class="sla-indicator sla-${level.status}"></span>
-                            Level ${level.level} - ${level.name}
-                        </td>
-                        <td>${level.targetTime}</td>
-                        <td>${level.activeTickets}</td>
-                        <td class="text-danger">${level.breached}</td>
-                        <td>
-                            <div class="progress" style="height: 6px;">
-                                <div class="progress-bar bg-${level.status === 'green' ? 'success' : level.status === 'yellow' ? 'warning' : 'danger'}" 
-                                     style="width: ${level.compliance}%"></div>
-                            </div>
-                            ${level.compliance}%
-                        </td>
-                    </tr>
-                `).join('');
+                if (data.success) {
+                    const tbody = document.getElementById('sla-overview-table');
+                    tbody.innerHTML = data.sla_levels.map(level => `
+                        <tr>
+                            <td>
+                                <span class="sla-indicator sla-${level.status}"></span>
+                                ${level.priority} Priority
+                            </td>
+                            <td>${level.target_hours}h</td>
+                            <td>${level.total_tickets}</td>
+                            <td class="text-danger">${level.breached}</td>
+                            <td>
+                                <div class="progress" style="height: 6px;">
+                                    <div class="progress-bar bg-${level.status === 'green' ? 'success' : level.status === 'yellow' ? 'warning' : 'danger'}" 
+                                         style="width: ${level.compliance_rate}%"></div>
+                                </div>
+                                ${level.compliance_rate}%
+                            </td>
+                        </tr>
+                    `).join('');
+                    
+                    // Update SLA breaches metric
+                    const totalBreaches = data.sla_levels.reduce((sum, level) => sum + level.breached, 0);
+                    document.getElementById('sla-breaches').textContent = totalBreaches;
+                } else {
+                    console.error('Error in SLA data:', data.error);
+                }
             } catch (error) {
                 console.error('Error loading SLA overview:', error);
             }

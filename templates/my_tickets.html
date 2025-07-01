@@ -107,6 +107,12 @@
                                             {% else %}bg-secondary{% endif %} priority-badge">
                                         {{ ticket.Priority.title() }} Priority
                                     </span>
+                                    <span class="badge me-2
+                                            {% if ticket.EscalationLevel == 'admin' %}bg-danger
+                                            {% elif ticket.EscalationLevel == 'supervisor' %}bg-warning text-dark
+                                            {% else %}bg-success{% endif %} escalation-badge">
+                                        {{ (ticket.EscalationLevel or 'normal').title() }} Level
+                                    </span>
                                     <small class="text-muted">
                                         <i class="fas fa-folder me-1"></i>
                                         {{ categories.get(ticket.CategoryID, 'Unknown') }}

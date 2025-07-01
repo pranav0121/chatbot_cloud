@@ -125,6 +125,12 @@
                             <option value="medium">Medium</option>
                             <option value="low">Low</option>
                         </select>
+                        <select class="form-select" id="escalation-filter" onchange="filterTickets()">
+                            <option value="">All Escalation Levels</option>
+                            <option value="normal">Normal</option>
+                            <option value="supervisor">Supervisor</option>
+                            <option value="admin">Admin</option>
+                        </select>
                         <select class="form-select" id="category-filter" onchange="filterTickets()">
                             <option value="">All Categories</option>
                         </select>
@@ -139,6 +145,7 @@
                                 <th>ID</th>
                                 <th>Subject</th>
                                 <th>Priority</th>
+                                <th>Escalation</th>
                                 <th>Organization</th>
                                 <th>Category</th>
                                 <th>User</th>

@@ -277,7 +277,7 @@ async function loadTickets() {
             showNotification(`Tickets error: ${response_data.error || 'Unknown error'}`, 'error');
 
             const tbody = document.getElementById('tickets-tbody');
-            tbody.innerHTML = `<tr><td colspan="10" class="text-center text-danger">
+            tbody.innerHTML = `<tr><td colspan="11" class="text-center text-danger">
                 Error loading tickets: ${response_data.error || 'Unknown error'}
             </td></tr>`;
             return;
@@ -290,7 +290,7 @@ async function loadTickets() {
         const tbody = document.getElementById('tickets-tbody');
         if (!Array.isArray(tickets) || tickets.length === 0) {
             console.log('No tickets found');
-            tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">No tickets found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">No tickets found</td></tr>';
             return;
         }
 
@@ -300,6 +300,7 @@ async function loadTickets() {
                 <td>#${ticket.id}</td>
                 <td>${ticket.subject || 'No subject'}</td>
                 <td><span class="priority-badge priority-${ticket.priority || 'medium'}">${(ticket.priority || 'medium').toUpperCase()}</span></td>
+                <td><span class="escalation-badge escalation-${ticket.escalation_level || 'normal'}">${(ticket.escalation_level || 'normal').toUpperCase()}</span></td>
                 <td class="organization-cell">
                     <div class="organization-name">${ticket.organization || 'Unknown Org'}</div>
                     <small class="text-muted">${ticket.user_name || 'Anonymous'}</small>
@@ -330,7 +331,7 @@ async function loadTickets() {
         showNotification('Failed to load tickets. Please check the server connection.', 'error');
 
         const tbody = document.getElementById('tickets-tbody');
-        tbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger">
+        tbody.innerHTML = `<tr><td colspan="11" class="text-center text-danger">
             Failed to load tickets: ${error.message}
         </td></tr>`;
     }
@@ -339,6 +340,7 @@ async function loadTickets() {
 function filterTickets() {
     const statusFilter = document.getElementById('status-filter').value;
     const priorityFilter = document.getElementById('priority-filter').value;
+    const escalationFilter = document.getElementById('escalation-filter').value;
     const categoryFilter = document.getElementById('category-filter').value;
     const organizationFilter = document.getElementById('organization-filter').value.toLowerCase();
 
@@ -346,19 +348,21 @@ function filterTickets() {
 
     rows.forEach(row => {
         const cells = row.cells;
-        if (cells.length < 8) return; // Skip header or malformed rows
+        if (cells.length < 9) return; // Skip header or malformed rows
 
-        const status = cells[6].textContent.toLowerCase().trim();
+        const status = cells[7].textContent.toLowerCase().trim();
         const priority = cells[2].textContent.toLowerCase().trim();
-        const category = cells[4].textContent.toLowerCase().trim();
-        const organization = cells[3].textContent.toLowerCase().trim();
+        const escalation = cells[3].textContent.toLowerCase().trim();
+        const category = cells[5].textContent.toLowerCase().trim();
+        const organization = cells[4].textContent.toLowerCase().trim();
 
         const statusMatch = !statusFilter || status.includes(statusFilter.replace('_', ' '));
         const priorityMatch = !priorityFilter || priority.includes(priorityFilter);
+        const escalationMatch = !escalationFilter || escalation.includes(escalationFilter);
         const categoryMatch = !categoryFilter || category.includes(categoryFilter.toLowerCase());
         const organizationMatch = !organizationFilter || organization.includes(organizationFilter);
 
-        if (statusMatch && priorityMatch && categoryMatch && organizationMatch) {
+        if (statusMatch && priorityMatch && escalationMatch && categoryMatch && organizationMatch) {
             row.style.display = '';
         } else {
             row.style.display = 'none';
@@ -399,6 +403,7 @@ async function viewTicket(ticketId) {
                         <p><strong>Subject:</strong> ${ticket.subject}</p>
                         <p><strong>Category:</strong> ${ticket.category}</p>
                         <p><strong>Priority:</strong> <span class="priority-badge priority-${ticket.priority || 'medium'}">${(ticket.priority || 'medium').toUpperCase()}</span></p>
+                        <p><strong>Escalation Level:</strong> <span class="escalation-badge escalation-${ticket.escalation_level || 'normal'}">${(ticket.escalation_level || 'normal').toUpperCase()}</span></p>
                         <p><strong>Status:</strong> <span class="status-badge status-${ticket.status}">${ticket.status.replace('_', ' ')}</span></p>
                     </div>
                     <div class="col-md-6">

@@ -275,6 +275,7 @@ class Ticket(db.Model):
     UpdatedAt = db.Column(db.DateTime, default=datetime.utcnow)
     EndDate = db.Column(db.DateTime, nullable=True)  # When ticket was actually resolved/closed
     Country = db.Column(db.String(100), nullable=True)  # Country where ticket originated
+    EscalationLevel = db.Column(db.String(20), default='normal')  # normal, supervisor, admin escalation levels
       # Extended Ticket model fields for enterprise features
     escalation_level = db.Column(db.Integer, default=0)  # 0=Bot, 1=ICP, 2=YouCloud  
     current_sla_target = db.Column(db.DateTime, nullable=True)
@@ -988,6 +989,16 @@ def create_ticket():
         # Determine ticket priority (use user's priority level by default)
         ticket_priority = data.get('priority', user.PriorityLevel if user else 'medium')
         
+        # Auto-detect escalation level based on priority
+        if ticket_priority == 'critical':
+            escalation_level = 'admin'
+        elif ticket_priority == 'high':
+            escalation_level = 'supervisor'
+        else:
+            escalation_level = 'normal'
+        
+        logger.info(f"Auto-assigned escalation level: {escalation_level} (based on priority: {ticket_priority})")
+        
         # Auto-detect country from user's location
         ticket_country = 'Unknown'
         try:
@@ -1010,7 +1021,8 @@ def create_ticket():
                 Status='open',
                 OrganizationName=user.OrganizationName if user else data.get('organization', 'Unknown'),
                 CreatedBy=user.Name if user else data.get('name', 'Anonymous'),
-                Country=ticket_country  # Add country auto-detection
+                Country=ticket_country,  # Add country auto-detection
+                EscalationLevel=escalation_level  # Add escalation level auto-detection
             )
             db.session.add(ticket)
             db.session.flush()  # Get the ID without committing
@@ -1633,6 +1645,7 @@ def get_admin_tickets():
                     'user_email': user.Email if user else 'No email',
                     'organization': user.OrganizationName if user else ticket.OrganizationName or 'Unknown Organization',
                     'priority': ticket.Priority or 'medium',
+                    'escalation_level': ticket.EscalationLevel or 'normal',  # Add escalation level
                     'status': ticket.Status,
                     'created_at': format_timestamp_with_tz(ticket.CreatedAt),
                     'updated_at': format_timestamp_with_tz(ticket.UpdatedAt) if ticket.UpdatedAt else format_timestamp_with_tz(ticket.CreatedAt),
@@ -1843,10 +1856,13 @@ def get_admin_ticket_details(ticket_id):
             'category': category.Name,
             'user_name': user.Name if user else None,
             'user_email': user.Email if user else None,
+            'priority': ticket_obj.Priority or 'medium',
+            'escalation_level': ticket_obj.EscalationLevel or 'normal',  # Add escalation level
             'status': ticket_obj.Status,
             'created_at': format_timestamp_with_tz(ticket_obj.CreatedAt),
             'updated_at': format_timestamp_with_tz(ticket_obj.UpdatedAt) if ticket_obj.UpdatedAt else None,
             'end_date': format_timestamp_with_tz(ticket_obj.EndDate) if ticket_obj.EndDate else None,
+            'organization': user.OrganizationName if user else ticket_obj.OrganizationName or 'Unknown Organization',  # Add organization
             'country': ticket_obj.Country if ticket_obj.Country else 'Unknown',  # Add country information
             'messages': message_list
         }

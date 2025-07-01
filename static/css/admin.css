@@ -575,6 +575,47 @@ body {
     }
 }
 
+/* Escalation level badges */
+.escalation-badge {
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+.escalation-admin {
+    background: linear-gradient(135deg, #dc3545, #c82333);
+    color: white;
+    box-shadow: 0 2px 4px rgba(220, 53, 69, 0.3);
+    animation: pulse-escalation 2s infinite;
+}
+
+.escalation-supervisor {
+    background: linear-gradient(135deg, #fd7e14, #e55a00);
+    color: white;
+    box-shadow: 0 2px 4px rgba(253, 126, 20, 0.3);
+}
+
+.escalation-normal {
+    background: linear-gradient(135deg, #28a745, #1e7e34);
+    color: white;
+    box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
+}
+
+@keyframes pulse-escalation {
+    0%,
+    100% {
+        box-shadow: 0 2px 4px rgba(220, 53, 69, 0.3);
+    }
+
+    50% {
+        box-shadow: 0 4px 8px rgba(220, 53, 69, 0.6);
+    }
+}
+
 /* Organization display */
 .organization-cell {
     min-width: 150px;

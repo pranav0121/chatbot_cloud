@@ -19,6 +19,9 @@ import warnings
 # Odoo Integration
 from odoo_service import OdooService
 
+# Location service for country detection
+from location_service import location_service
+
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -231,6 +234,7 @@ class User(UserMixin, db.Model):
     Phone = db.Column(db.String(20), nullable=True)
     Department = db.Column(db.String(100), nullable=True)
     PreferredLanguage = db.Column(db.String(10), default='en')
+    Country = db.Column(db.String(100), nullable=True)  # User's country location
     IsActive = db.Column(db.Boolean, default=True)
     IsAdmin = db.Column(db.Boolean, default=False)
     LastLogin = db.Column(db.DateTime, nullable=True)
@@ -270,6 +274,7 @@ class Ticket(db.Model):
     CreatedAt = db.Column(db.DateTime, default=datetime.utcnow)
     UpdatedAt = db.Column(db.DateTime, default=datetime.utcnow)
     EndDate = db.Column(db.DateTime, nullable=True)  # When ticket was actually resolved/closed
+    Country = db.Column(db.String(100), nullable=True)  # Country where ticket originated
       # Extended Ticket model fields for enterprise features
     escalation_level = db.Column(db.Integer, default=0)  # 0=Bot, 1=ICP, 2=YouCloud  
     current_sla_target = db.Column(db.DateTime, nullable=True)
@@ -983,6 +988,18 @@ def create_ticket():
         # Determine ticket priority (use user's priority level by default)
         ticket_priority = data.get('priority', user.PriorityLevel if user else 'medium')
         
+        # Auto-detect country from user's location
+        ticket_country = 'Unknown'
+        try:
+            location_info = location_service.detect_country_from_request(request)
+            if location_info and location_info.get('country'):
+                ticket_country = location_info['country']
+                logger.info(f"Auto-detected country for new ticket: {ticket_country}")
+            else:
+                logger.warning("Could not auto-detect country for new ticket")
+        except Exception as e:
+            logger.warning(f"Country auto-detection failed: {e}")
+        
         # Create ticket with enhanced information
         try:
             ticket = Ticket(
@@ -992,7 +1009,8 @@ def create_ticket():
                 Priority=ticket_priority,
                 Status='open',
                 OrganizationName=user.OrganizationName if user else data.get('organization', 'Unknown'),
-                CreatedBy=user.Name if user else data.get('name', 'Anonymous')
+                CreatedBy=user.Name if user else data.get('name', 'Anonymous'),
+                Country=ticket_country  # Add country auto-detection
             )
             db.session.add(ticket)
             db.session.flush()  # Get the ID without committing
@@ -1241,16 +1259,42 @@ def create_ticket_with_attachment():
         # Create or get user
         user = User.query.filter_by(Email=data['email']).first()
         if not user:
-            user = User(Name=data['name'], Email=data['email'])
+            # Auto-detect country for new user
+            user_country = 'Unknown'
+            try:
+                location_info = location_service.detect_country_from_request(request)
+                if location_info and location_info.get('country'):
+                    user_country = location_info['country']
+                    logger.info(f"Auto-detected country for new user: {user_country}")
+            except Exception as e:
+                logger.warning(f"User country auto-detection failed: {e}")
+            
+            user = User(
+                Name=data['name'], 
+                Email=data['email'],
+                OrganizationName=data.get('organization', 'Unknown'),
+                Country=user_country  # Add country auto-detection for new users
+            )
             db.session.add(user)
             db.session.flush()
+        
+        # Auto-detect country for ticket
+        ticket_country = 'Unknown'
+        try:
+            location_info = location_service.detect_country_from_request(request)
+            if location_info and location_info.get('country'):
+                ticket_country = location_info['country']
+                logger.info(f"Auto-detected country for new ticket: {ticket_country}")
+        except Exception as e:
+            logger.warning(f"Ticket country auto-detection failed: {e}")
         
         # Create ticket
         ticket = Ticket(
             UserID=user.UserID,
             CategoryID=int(data['category_id']),
             Subject=data.get('subject', 'Support Request'),
-            Status='open'
+            Status='open',
+            Country=ticket_country  # Add country auto-detection
         )
         db.session.add(ticket)
         db.session.flush()
@@ -1592,7 +1636,8 @@ def get_admin_tickets():
                     'status': ticket.Status,
                     'created_at': format_timestamp_with_tz(ticket.CreatedAt),
                     'updated_at': format_timestamp_with_tz(ticket.UpdatedAt) if ticket.UpdatedAt else format_timestamp_with_tz(ticket.CreatedAt),
-                    'end_date': format_timestamp_with_tz(ticket.EndDate) if ticket.EndDate else None
+                    'end_date': format_timestamp_with_tz(ticket.EndDate) if ticket.EndDate else None,
+                    'country': ticket.Country if ticket.Country else 'Unknown'  # Add country information
                 }
                 result.append(ticket_data)
                 logger.info(f"Processed ticket {ticket.TicketID}: {ticket.Subject} - Priority: {ticket.Priority}, Org: {ticket_data['organization']}")
@@ -1796,11 +1841,13 @@ def get_admin_ticket_details(ticket_id):
             'id': ticket_obj.TicketID,
             'subject': ticket_obj.Subject,
             'category': category.Name,
-            'user_name': user.Name if user else None,            'user_email': user.Email if user else None,
+            'user_name': user.Name if user else None,
+            'user_email': user.Email if user else None,
             'status': ticket_obj.Status,
             'created_at': format_timestamp_with_tz(ticket_obj.CreatedAt),
             'updated_at': format_timestamp_with_tz(ticket_obj.UpdatedAt) if ticket_obj.UpdatedAt else None,
             'end_date': format_timestamp_with_tz(ticket_obj.EndDate) if ticket_obj.EndDate else None,
+            'country': ticket_obj.Country if ticket_obj.Country else 'Unknown',  # Add country information
             'messages': message_list
         }
         
@@ -2082,9 +2129,11 @@ def get_ticket_details(ticket_id):
             'status': ticket.Status,
             'category': category.Name if category else 'Unknown',
             'user_name': user.Name if user else 'Anonymous',
-            'user_email': user.Email if user else 'No email',            'created_at': format_timestamp_with_tz(ticket.CreatedAt),
+            'user_email': user.Email if user else 'No email',
+            'created_at': format_timestamp_with_tz(ticket.CreatedAt),
             'updated_at': format_timestamp_with_tz(ticket.UpdatedAt),
             'end_date': format_timestamp_with_tz(ticket.EndDate) if ticket.EndDate else None,
+            'country': ticket.Country if ticket.Country else 'Unknown',  # Add country information
             'messages': message_list
         }
         

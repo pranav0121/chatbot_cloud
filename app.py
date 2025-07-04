@@ -1,7 +1,6 @@
 from flask import Flask, render_template, request, jsonify, send_from_directory, url_for, redirect, session, flash
 from flask_login import LoginManager, login_required, current_user, UserMixin
 from flask_babel import Babel, _
-from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timezone, timedelta
 import pyodbc
 import logging
@@ -222,7 +221,10 @@ if not setup_database():
 # Configure Flask-SocketIO - use default threading mode
 from flask_socketio import SocketIO, emit, join_room, leave_room
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
-db = SQLAlchemy(app)
+
+# Initialize database
+from database import db, init_app
+db = init_app(app)
 
 # Database Models - Define all models before using them
 class User(UserMixin, db.Model):
@@ -1343,7 +1345,7 @@ def upload_file():
         logger.error(f"Error uploading file: {e}")
         return jsonify({'error': 'Upload failed'}), 500
 
-@app.route('/api/tickets/with-attachment', methods=['POST'])
+@app.route('/api/tickets/with-attachment', methods=['POST])
 def create_ticket_with_attachment():
     """Create ticket with file attachment"""
     try:
@@ -1913,6 +1915,7 @@ def get_admin_ticket_details(ticket_id):
             return jsonify({"error": "Ticket not found"}), 404
         
         ticket_obj, user, category = ticket
+ = ticket
         logger.info(f"Found ticket {ticket_id}: {ticket_obj.Subject}")
         
         # Get messages with attachments
@@ -2789,8 +2792,10 @@ except ImportError as e:
 if __name__ == '__main__':
     logger.info("Starting YouCloudTech Chatbot Application...")
     try:
-        db.create_all()
-        logger.info("Database tables created successfully")
+        # Create tables within application context
+        with app.app_context():
+            db.create_all()
+            logger.info("Database tables created successfully")
         socketio.run(app, host="0.0.0.0", port=5000, debug=True)
     except Exception as e:
         logger.error(f"Failed to start application: {e}")

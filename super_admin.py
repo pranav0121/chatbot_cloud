@@ -20,7 +20,8 @@ from models import (
 
 # Import main app models (using late import to avoid circular dependencies)
 def get_app_models():
-    from app import db, User, Ticket, Message
+    from database import db
+    from app import User, Ticket, Message
     return db, User, Ticket, Message
 
 logger = logging.getLogger(__name__)
@@ -50,7 +51,7 @@ def super_admin_required(f):
 
 def log_admin_action(action, resource_type, resource_id=None, details=None):
     """Log admin actions for audit trail"""
-    from app import db
+    from database import db
     
     try:
         audit_log = AuditLog(
@@ -89,7 +90,7 @@ def partners():
 @super_admin_required
 def get_partners():
     """Get all partners with statistics"""
-    from app import db
+    from database import db
     
     try:
         partners = Partner.query.all()
@@ -138,7 +139,7 @@ def get_partners():
 @super_admin_required
 def create_partner():
     """Create new partner"""
-    from app import db
+    from database import db
     import secrets
     
     try:
@@ -180,7 +181,7 @@ def create_partner():
 @super_admin_required
 def update_partner(partner_id):
     """Update partner"""
-    from app import db
+    from database import db
     
     try:
         partner = Partner.query.get_or_404(partner_id)
@@ -215,7 +216,7 @@ def update_partner(partner_id):
 @super_admin_required
 def delete_partner(partner_id):
     """Delete partner"""
-    from app import db
+    from database import db
     
     try:
         partner = Partner.query.get_or_404(partner_id)
@@ -249,7 +250,8 @@ def get_escalation_dashboard():
     """Get escalation dashboard data"""
     try:
         # Use direct imports instead of get_app_models()
-        from app import db, User, Ticket, Message
+        from database import db
+        from app import User, Ticket, Message
         
         logger.info("Escalation dashboard API called")
         
@@ -370,7 +372,8 @@ def get_escalation_dashboard():
 @super_admin_required
 def force_escalate_ticket(ticket_id):
     """Manually force escalate a ticket"""
-    from app import db, Ticket
+    from database import db
+    from app import Ticket
     from models import Partner
     
     try:
@@ -575,7 +578,8 @@ def workflow_logs():
 @super_admin_required
 def get_ticket_timeline(ticket_id):
     """Get complete timeline for a ticket"""
-    from app import db, Message
+    from database import db
+    from app import Message
     
     try:
         # Get status changes
@@ -647,7 +651,7 @@ def get_ticket_timeline(ticket_id):
 @super_admin_required
 def search_logs():
     """Search workflow logs with filters"""
-    from app import db
+    from database import db
     
     try:
         # Get query parameters
@@ -915,7 +919,7 @@ def bot_configuration():
 @super_admin_required
 def manage_bot_config():
     """Get or update bot configuration"""
-    from app import db
+    from database import db
     
     if request.method == 'GET':
         try:
@@ -1072,7 +1076,8 @@ def get_critical_alerts_alt():
 def get_workflow_logs():
     """Get workflow logs"""
     try:
-        from app import db, Ticket
+        from database import db
+        from app import Ticket
         from models import TicketStatusLog
         
         logs = db.session.query(TicketStatusLog).join(Ticket).order_by(
@@ -1108,7 +1113,8 @@ def get_workflow_logs():
 def get_audit_logs_api():
     """Get audit logs"""
     try:
-        from app import db, User
+        from database import db
+        from app import User
         from models import AuditLog
         
         logs = db.session.query(AuditLog).join(User, AuditLog.user_id == User.UserID, isouter=True).order_by(
@@ -1143,7 +1149,8 @@ def get_audit_logs_api():
 def get_users_list():
     """Get users list for audit log filters"""
     try:
-        from app import db, User
+        from database import db
+        from app import User
         
         users = db.session.query(User).all()
         
@@ -1169,7 +1176,7 @@ def get_users_list():
 def get_security_alerts():
     """Get security alerts"""
     try:
-        from app import db
+        from database import db
         from models import AuditLog
         from datetime import datetime, timedelta
         
@@ -1219,7 +1226,7 @@ def get_security_alerts():
 def get_bot_config():
     """Get bot configuration"""
     try:
-        from app import db
+        from database import db
         from models import BotConfiguration
         
         config = db.session.query(BotConfiguration).filter(
@@ -1259,7 +1266,7 @@ def get_bot_config():
 def save_bot_config():
     """Save bot configuration"""
     try:
-        from app import db
+        from database import db
         from models import BotConfiguration
         
         data = request.get_json()
@@ -1308,7 +1315,7 @@ def save_bot_config():
 def get_bot_status():
     """Get bot status and performance metrics"""
     try:
-        from app import db
+        from database import db
         from models import BotInteraction
         from datetime import datetime, timedelta
         
@@ -1393,7 +1400,8 @@ def test_bot_message():
 def get_ticket_details(ticket_id):
     """Get ticket details for workflow logs"""
     try:
-        from app import db, Ticket
+        from database import db
+        from app import Ticket
         
         ticket = db.session.query(Ticket).filter(Ticket.TicketID == ticket_id).first()
         
@@ -1783,7 +1791,8 @@ def get_dashboard_metrics_fixed():
     """Get comprehensive dashboard metrics"""
     try:
         # Use direct imports instead of get_app_models()
-        from app import db, User, Ticket, Message
+        from database import db
+        from app import User, Ticket, Message
         from datetime import datetime, timedelta
         from sqlalchemy import func
         

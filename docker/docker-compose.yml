@@ -1,26 +1,33 @@
-version: '3.8'
-
 services:
   chatbot:
-    build: .
+    build: 
+      context: ..
+      dockerfile: docker/Dockerfile
     ports:
       - "5000:5000"
     env_file:
-      - .env
+      - ./.env
     environment:
       - FLASK_ENV=production
+      - SKIP_DB_CHECK=false
+      - PYTHONUNBUFFERED=1
     volumes:
-      - ./static/uploads:/app/static/uploads
-      - ./translations:/app/translations
+      - ../static/uploads:/app/static/uploads
+      - ../translations:/app/translations
+      - chatbot_logs:/app/logs
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/api/database/test"]
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"] 
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
     networks:
       - chatbot-network
+
+volumes:
+  chatbot_logs:
+    driver: local
 
 networks:
   chatbot-network:

@@ -4,7 +4,7 @@ Extended Database Models for Enterprise Super Admin Portal
 """
 
 from datetime import datetime
-from app import db
+from database import db
 
 class Partner(db.Model):
     """Partner Management for ICP/YCP"""

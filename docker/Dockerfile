@@ -37,20 +37,29 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Copy and make entrypoint script executable
-COPY entrypoint.sh /entrypoint.sh
+COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Create directories for uploads and static files
 RUN mkdir -p static/uploads && \
     mkdir -p translations && \
+    mkdir -p logs && \
     chmod 755 static/uploads
+
+# Set up proper permissions for non-root user
+RUN useradd -m -u 1000 appuser && \
+    chown -R appuser:appuser /app && \
+    chown appuser:appuser /entrypoint.sh
 
 # Expose port 5000
 EXPOSE 5000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:5000/api/database/test || exit 1
+    CMD curl -f http://localhost:5000/health || exit 1
+
+# Switch to non-root user
+USER appuser
 
 # Use entrypoint script
 ENTRYPOINT ["/entrypoint.sh"]

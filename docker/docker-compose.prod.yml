@@ -9,6 +9,8 @@ services:
       - .env
     environment:
       - FLASK_ENV=production
+      - SKIP_DB_CHECK=false
+      - PYTHONUNBUFFERED=1
     volumes:
       - ./static/uploads:/app/static/uploads
       - ./translations:/app/translations

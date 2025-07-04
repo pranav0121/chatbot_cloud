@@ -7,11 +7,43 @@ __pycache__/
 instance/
 .env
 .env.*
+venv/
+.pytest_cache/
+
 # Docker
 *.dockerfile
 docker-compose.override.yml
+
 # VSCode
 .vscode/
+
+# Git
+.git/
+
 # OS
 .DS_Store
 Thumbs.db
+
+# Test files and temporary files
+*test*.py
+*debug*.py
+*simple*.py
+*quick*.py
+*final*.py
+*complete*.py
+*check*.py
+*verify*.py
+*fix*.py
+*.backup*
+*.bak
+*.tmp
+
+# Documentation (keep only essential)
+*.md
+!README.md
+!docker/DOCKER_DEPLOYMENT_GUIDE.md
+
+# Batch and shell scripts (development only)
+*.bat
+*.sh
+!docker/entrypoint.sh

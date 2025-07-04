@@ -2,16 +2,18 @@ version: '3.8'
 
 services:
   chatbot:
-    build: .
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     ports:
       - "5000:5000"
     env_file:
-      - .env
+      - ../.env
     environment:
       - FLASK_ENV=production
     volumes:
-      - ./static/uploads:/app/static/uploads
-      - ./translations:/app/translations
+      - ../static/uploads:/app/static/uploads
+      - ../translations:/app/translations
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/database/test"]

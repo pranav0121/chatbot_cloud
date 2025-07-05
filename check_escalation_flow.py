@@ -9,7 +9,7 @@ def check_escalation_flow():
     try:
         # Import here to avoid circular imports
         from app import app, db, Ticket, User, Category
-        from models import Partner, SLALog
+        from database import Partner, SLALog
         
         with app.app_context():
             print("=== ESCALATION FLOW ANALYSIS ===\n")

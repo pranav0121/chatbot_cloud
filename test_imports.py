@@ -21,7 +21,7 @@ def test_imports():
         print("✅ super_admin_bp imported successfully")
         
         print("Testing models imports...")
-        from models import Partner, SLALog, TicketStatusLog, AuditLog
+        from database import Partner, SLALog, TicketStatusLog, AuditLog
         print("✅ Extended models imported successfully")
         
         print("Testing Flask app initialization...")

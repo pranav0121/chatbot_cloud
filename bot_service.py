@@ -73,7 +73,7 @@ class BotService:
     def _get_active_bot_config(self) -> Optional[Dict]:
         """Get active bot configuration"""
         from app import db
-        from models import BotConfiguration
+        from database import BotConfiguration
         
         try:
             config = BotConfiguration.query.filter_by(is_active=True).first()
@@ -291,7 +291,7 @@ class BotService:
     def _get_bot_attempt_count(self, ticket_id: int) -> int:
         """Get number of bot attempts for this ticket"""
         from app import db
-        from models import BotInteraction
+        from database import BotInteraction
         
         try:
             count = BotInteraction.query.filter_by(ticket_id=ticket_id).count()
@@ -305,7 +305,7 @@ class BotService:
                            session_id: str = None):
         """Log bot interaction for analytics"""
         from app import db
-        from models import BotInteraction
+        from database import BotInteraction
         
         try:
             interaction = BotInteraction(

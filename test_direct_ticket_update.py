@@ -8,7 +8,7 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from app import app, db, Ticket
-from models import SLALog, TicketStatusLog, Partner
+from database import SLALog, TicketStatusLog, Partner
 from datetime import datetime
 
 def test_direct_ticket_update():

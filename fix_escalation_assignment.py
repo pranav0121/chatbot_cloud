@@ -13,7 +13,7 @@ def fix_escalation_partner_assignment():
     
     try:
         from app import app, db, Ticket
-        from models import Partner, SLALog
+        from database import Partner, SLALog
         
         with app.app_context():
             print("=== FIXING ESCALATION PARTNER ASSIGNMENT ===\n")

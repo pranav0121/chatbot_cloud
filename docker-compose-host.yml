@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  # Flask Application (simplified - connects to host MSSQL)
+  app:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: chatbot-flask-app
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=production
+      - SECRET_KEY=your-secret-key-here-change-in-production
+      - DEBUG=False
+      
+      # Connect to host MSSQL (using host networking)
+      - DB_SERVER=PRANAV\\SQLEXPRESS
+      - DB_DATABASE=SupportChatbot
+      - DB_USERNAME=sa
+      - DB_PASSWORD=
+      - DB_USE_WINDOWS_AUTH=True
+      
+      # Odoo Configuration
+      - ODOO_URL=https://youcloudpay.odoo.com
+      - ODOO_DB=youcloudpay
+      - ODOO_USERNAME=pranav.r@youcloudtech.com
+      - ODOO_PASSWORD=Pranav.r@1124
+      
+      # Logging
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+    network_mode: "host"  # Use host networking to access local MSSQL
+    restart: unless-stopped
+
+networks:
+  default:
+    driver: bridge

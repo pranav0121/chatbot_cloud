@@ -21,7 +21,7 @@ def test_system_components():
         print("\n📦 Testing Core Imports...")
         from app import app, db
         from sla_monitor import sla_monitor
-        from models import Partner, SLALog, TicketStatusLog, AuditLog, EscalationRule, BotConfiguration, BotInteraction
+        from database import Partner, SLALog, TicketStatusLog, AuditLog, EscalationRule, BotConfiguration, BotInteraction
         print("✅ All core imports successful")
         results.append(("Core Imports", True, "All imports working"))
     except Exception as e:

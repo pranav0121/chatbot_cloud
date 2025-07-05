@@ -89,7 +89,7 @@ class SLAMonitor:
         """Check all active tickets for SLA compliance"""
         try:
             from app import db, Ticket
-            from models import SLALog, EscalationRule
+            from database import SLALog, EscalationRule
             
             # Get all active tickets
             active_tickets = Ticket.query.filter(
@@ -131,7 +131,7 @@ class SLAMonitor:
         """Create initial SLA log for a ticket"""
         try:
             from app import db
-            from models import SLALog, EscalationRule
+            from database import SLALog, EscalationRule
             
             # Get escalation rule for this ticket
             escalation_rule = EscalationRule.query.filter_by(
@@ -172,7 +172,7 @@ class SLAMonitor:
     def _trigger_escalation(self, ticket, sla_log):
         """Trigger escalation to next level"""
         from app import db
-        from models import TicketStatusLog, EscalationRule
+        from database import TicketStatusLog, EscalationRule
         
         try:
             # Determine next escalation level
@@ -201,7 +201,7 @@ class SLAMonitor:
                 # Default SLA hours
                 sla_hours = [0, 4, 24][next_level]
             
-            from models import SLALog
+            from database import SLALog
             new_sla_log = SLALog(
                 ticket_id=ticket.TicketID,
                 escalation_level=next_level,
@@ -236,7 +236,7 @@ class SLAMonitor:
     def _process_escalations(self):
         """Process any pending escalations"""
         from app import db, Ticket
-        from models import SLALog
+        from database import SLALog
         
         try:
             # Find tickets that need escalation but haven't been escalated yet
@@ -279,7 +279,7 @@ class SLAMonitor:
     
     def _notify_partner_escalation(self, ticket, sla_log):
         """Notify partners about escalated tickets and assign them"""
-        from models import Partner
+        from database import Partner
         
         try:
             # Find appropriate partner for this escalation level
@@ -398,7 +398,7 @@ class SLAMonitor:
     def get_sla_statistics(self) -> Dict:
         """Get SLA compliance statistics"""
         from app import db
-        from models import SLALog
+        from database import SLALog
         
         try:
             # Get statistics for last 30 days

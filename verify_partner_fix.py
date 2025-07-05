@@ -16,7 +16,7 @@ def verify_partner_fix():
     try:
         # Test 1: Import models
         print("\n1. Testing model imports...")
-        from models import Partner, SLALog
+        from database import Partner, SLALog
         print("   ✅ Partner and SLALog models imported successfully")
         
         # Test 2: Import super admin

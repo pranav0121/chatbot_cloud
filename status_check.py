@@ -16,7 +16,7 @@ def check_system_status():
         print("✅ Testing imports...")
         import app
         from super_admin import super_admin_bp
-        from models import Partner, SLALog
+        from database import Partner, SLALog
         print("✅ All imports successful")
         
         # Test app initialization

@@ -26,7 +26,7 @@ def test_core_system():
         print("Test 1: Testing Core Imports...")
         import app
         from super_admin import super_admin_bp
-        from models import Partner, SLALog, TicketStatusLog, AuditLog
+        from database import Partner, SLALog, TicketStatusLog, AuditLog
         from auth import admin_required
         print("✅ PASS: All core modules imported successfully")
         results.append(True)

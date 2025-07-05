@@ -46,7 +46,7 @@ class EnterpriseSystemTest:
             # Test imports
             import app
             from super_admin import super_admin_bp
-            from models import Partner, SLALog, TicketStatusLog, AuditLog
+            from database import Partner, SLALog, TicketStatusLog, AuditLog
             
             self.log_test("Application Imports", True, "All modules imported successfully")
             
@@ -194,7 +194,7 @@ class EnterpriseSystemTest:
         """Test 6: Database Operations and Models"""
         try:
             import app
-            from models import Partner, SLALog, TicketStatusLog
+            from database import Partner, SLALog, TicketStatusLog
             
             with app.app.app_context():
                 from app import db, User, Ticket

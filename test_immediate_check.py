@@ -10,7 +10,7 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from app import app, db, Ticket
-from models import SLALog, TicketStatusLog
+from database import SLALog, TicketStatusLog
 
 def escalate_and_check_immediately():
     print("=== ESCALATE AND CHECK IMMEDIATELY ===")

@@ -95,7 +95,7 @@ class SLAMonitor:
             from app import db, Ticket
             # Import models here to avoid circular import
             try:
-                from models import SLALog, EscalationRule
+                from database import SLALog, EscalationRule
             except ImportError:
                 logger.debug("Models not yet available, skipping SLA compliance check")
                 return
@@ -144,7 +144,7 @@ class SLAMonitor:
             from app import db
             # Import models here to avoid circular import
             try:
-                from models import SLALog, EscalationRule
+                from database import SLALog, EscalationRule
             except ImportError:
                 logger.debug("Models not yet available, cannot create SLA log")
                 return None
@@ -198,7 +198,7 @@ class SLAMonitor:
             from app import db
             # Import models here to avoid circular import
             try:
-                from models import TicketStatusLog, EscalationRule, SLALog
+                from database import TicketStatusLog, EscalationRule, SLALog
             except ImportError:
                 logger.debug("Models not yet available, cannot trigger escalation")
                 return
@@ -268,7 +268,7 @@ class SLAMonitor:
             from app import db, Ticket
             # Import models here to avoid circular import
             try:
-                from models import SLALog
+                from database import SLALog
             except ImportError:
                 logger.debug("Models not yet available, skipping escalation processing")
                 return
@@ -322,7 +322,7 @@ class SLAMonitor:
         try:
             # Import models here to avoid circular import
             try:
-                from models import Partner
+                from database import Partner
             except ImportError:
                 logger.debug("Models not yet available, cannot notify partners")
                 return
@@ -417,7 +417,7 @@ class SLAMonitor:
             from app import db
             # Import models here to avoid circular import
             try:
-                from models import SLALog
+                from database import SLALog
             except ImportError:
                 logger.debug("Models not yet available, returning empty statistics")
                 return {

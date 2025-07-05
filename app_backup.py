@@ -2517,7 +2517,7 @@ except Exception as e:
     logger.warning(f"SLA monitoring service not started: {e}")
 
 # Import extended models
-from models import (
+from database import (
     Partner, SLALog, TicketStatusLog, AuditLog, EscalationRule,
     BotConfiguration, BotInteraction
 )

@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  # Flask Application Service
+  chatbot-app:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: chatbot-flask-app
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=production
+      - FLASK_APP=app.py
+    env_file:
+      - .env.docker.production
+    volumes:
+      # Mount logs for monitoring (optional)
+      - ./logs:/app/logs
+      # Mount uploads directory for persistence (optional)
+      - ./uploads:/app/static/uploads
+    networks:
+      - chatbot-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      - redis
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+  # Redis Service for caching and session storage
+  redis:
+    image: redis:7-alpine
+    container_name: chatbot-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - chatbot-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+# Networks
+networks:
+  chatbot-network:
+    driver: bridge
+    name: chatbot-network
+
+# Volumes for data persistence
+volumes:
+  redis-data:
+    driver: local
+    name: chatbot-redis-data

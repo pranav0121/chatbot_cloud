@@ -11,7 +11,7 @@ def debug_escalation_assignment():
     
     try:
         from app import app, db, Ticket
-        from models import Partner, SLALog
+        from database import Partner, SLALog
         
         with app.app_context():
             print("=== DEBUGGING ESCALATION ASSIGNMENT ===\n")

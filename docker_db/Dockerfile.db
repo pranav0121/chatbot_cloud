@@ -1,0 +1,12 @@
+# Use the official Microsoft SQL Server 2019 image
+FROM mcr.microsoft.com/mssql/server:2019-latest
+
+# Set environment variables for SA password and accept EULA
+ENV SA_PASSWORD=YourStrong!Passw0rd
+ENV ACCEPT_EULA=Y
+
+# Expose the default SQL Server port
+EXPOSE 1433
+
+# Start SQL Server
+CMD ["/opt/mssql/bin/sqlservr"]

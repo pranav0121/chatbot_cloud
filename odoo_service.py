@@ -12,6 +12,93 @@ from typing import Dict, List, Optional, Any
 logger = logging.getLogger(__name__)
 
 class OdooService:
+    def delete_ticket(self, ticket_id: int) -> bool:
+        """Delete a helpdesk ticket in Odoo"""
+        if not self.is_connected():
+            logger.warning("Odoo not connected, cannot delete ticket")
+            return False
+        try:
+            result = self.models.execute_kw(
+                self.db, self.uid, self.password,
+                'helpdesk.ticket', 'unlink',
+                [[ticket_id]]
+            )
+            logger.info(f"Deleted ticket {ticket_id}")
+            return result
+        except Exception as e:
+            logger.error(f"Failed to delete ticket: {e}")
+            return False
+    def get_tickets(self, limit=10, offset=0) -> list:
+        """Fetch helpdesk tickets from Odoo"""
+        if not self.is_connected():
+            logger.warning("Odoo not connected, cannot fetch tickets")
+            return []
+        try:
+            tickets = self.models.execute_kw(
+                self.db, self.uid, self.password,
+                'helpdesk.ticket', 'search_read',
+                [[]],
+                {'fields': ['id', 'name', 'stage_id', 'partner_id', 'priority'], 'limit': limit, 'offset': offset}
+            )
+            return tickets
+        except Exception as e:
+            logger.error(f"Failed to fetch tickets: {e}")
+            return []
+    def update_ticket(self, ticket_id: int, **fields) -> bool:
+        """Update a helpdesk ticket in Odoo"""
+        if not self.is_connected():
+            logger.warning("Odoo not connected, cannot update ticket")
+            return False
+        try:
+            result = self.models.execute_kw(
+                self.db, self.uid, self.password,
+                'helpdesk.ticket', 'write',
+                [[ticket_id], fields]
+            )
+            logger.info(f"Updated ticket {ticket_id} with fields {fields}")
+            return result
+        except Exception as e:
+            logger.error(f"Failed to update ticket: {e}")
+            return False
+    def get_customers(self, limit=10, offset=0) -> list:
+        """Fetch customers (res.partner) from Odoo"""
+        if not self.is_connected():
+            logger.warning("Odoo not connected, cannot fetch customers")
+            return []
+        try:
+            customers = self.models.execute_kw(
+                self.db, self.uid, self.password,
+                'res.partner', 'search_read',
+                [[]],
+                {'fields': ['id', 'name', 'email', 'phone'], 'limit': limit, 'offset': offset}
+            )
+            return customers
+        except Exception as e:
+            logger.error(f"Failed to fetch customers: {e}")
+            return []
+    def test_connection(self) -> dict:
+        """Test Odoo connection and return status/info"""
+        result = {"status": "error"}
+        try:
+            if self.is_connected():
+                # Try a simple call to check connection
+                version = self.common.version() if self.common else None
+                result = {
+                    "status": "success",
+                    "message": "Connected to Odoo",
+                    "version": version
+                }
+            else:
+                result = {
+                    "status": "error",
+                    "message": "Not connected to Odoo"
+                }
+        except Exception as e:
+            result = {
+                "status": "error",
+                "message": str(e)
+            }
+        return result
     """Service class for Odoo API integration with redirect handling"""
     
     def __init__(self, url: str, db: str, username: str, password: str):

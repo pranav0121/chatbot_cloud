@@ -2733,26 +2733,40 @@ def odoo_tickets():
             logger.error(f"Error creating ticket: {e}")
             return jsonify({'error': str(e)}), 500
 
-@app.route('/api/odoo/tickets/<int:ticket_id>', methods=['PUT'])
-def update_odoo_ticket(ticket_id):
-    """Update a ticket in Odoo"""
+
+@app.route('/api/odoo/tickets/<int:ticket_id>', methods=['PUT', 'DELETE'])
+def odoo_ticket_detail(ticket_id):
+    """Update or delete a ticket in Odoo"""
     if not odoo_service:
         return jsonify({'error': 'Odoo service not available'}), 503
-    
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
-        
-        result = odoo_service.update_ticket(ticket_id, **data)
-        
-        return jsonify({
-            'status': 'success',
-            'message': f'Ticket {ticket_id} updated successfully'
-        })
-    except Exception as e:
-        logger.error(f"Error updating ticket: {e}")
-        return jsonify({'error': str(e)}), 500
+
+    if request.method == 'PUT':
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({'error': 'No data provided'}), 400
+            result = odoo_service.update_ticket(ticket_id, **data)
+            return jsonify({
+                'status': 'success',
+                'message': f'Ticket {ticket_id} updated successfully'
+            })
+        except Exception as e:
+            logger.error(f"Error updating ticket: {e}")
+            return jsonify({'error': str(e)}), 500
+
+    elif request.method == 'DELETE':
+        try:
+            result = odoo_service.delete_ticket(ticket_id)
+            if result:
+                return jsonify({
+                    'status': 'success',
+                    'message': f'Ticket {ticket_id} deleted successfully'
+                })
+            else:
+                return jsonify({'error': f'Failed to delete ticket {ticket_id}'}), 500
+        except Exception as e:
+            logger.error(f"Error deleting ticket: {e}")
+            return jsonify({'error': str(e)}), 500
 
 ###############################################################
 # Generic Odoo API Endpoints for All Models and Methods
